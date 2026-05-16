@@ -1,66 +1,67 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import React from 'react';
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="animate-fade">
+      <header style={{ textAlign: 'center', marginTop: '4rem' }}>
+        <div style={{ 
+          display: 'inline-block', 
+          padding: '4px 12px', 
+          background: 'rgba(59, 130, 246, 0.1)', 
+          borderRadius: '100px', 
+          color: 'var(--accent)',
+          fontSize: '0.8rem',
+          fontWeight: '600',
+          marginBottom: '1rem'
+        }}>
+          PREVIEW RELEASE
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <h1 className="text-gradient" style={{ fontSize: '3.5rem', lineHeight: '1.1', fontWeight: 800 }}>
+          Pico.
+        </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', marginTop: '1rem', maxWidth: '320px', margin: '1rem auto' }}>
+          Sell small wins for small prices. The Link-in-Bio tool for creators.
+        </p>
+        <div style={{ marginTop: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <button className="btn btn-primary">Claim your handle</button>
+          <button className="btn btn-secondary">See a demo</button>
         </div>
-      </main>
+      </header>
+
+      <section style={{ marginTop: '6rem' }}>
+        <div className="glass" style={{ padding: '2rem' }}>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem' }}>Why Pico?</h2>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div>
+              <div style={{ color: 'var(--accent)', fontWeight: 'bold', marginBottom: '0.5rem' }}>01. No "Platform Tax"</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                Keep 98% of your revenue. No 30% Apple tax. No high Stripe fixed fees.
+              </p>
+            </div>
+            
+            <div>
+              <div style={{ color: 'var(--accent)', fontWeight: 'bold', marginBottom: '0.5rem' }}>02. X402 Powered</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                The web's native payment protocol. Instant unlocks, near-zero gas on Base.
+              </p>
+            </div>
+            
+            <div>
+              <div style={{ color: 'var(--accent)', fontWeight: 'bold', marginBottom: '0.5rem' }}>03. FaceID Checkout</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                Fans pay in seconds with their thumbprint. No crypto knowledge required.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer style={{ marginTop: '6rem', textAlign: 'center', paddingBottom: '4rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+          Built on Base &bull; Powered by X402
+        </p>
+      </footer>
     </div>
   );
 }

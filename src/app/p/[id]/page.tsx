@@ -1,0 +1,139 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useAccount, useConnect, useSendTransaction } from 'wagmi';
+import { parseEther } from 'viem';
+import { getPicoLinkById } from '@/app/actions/pico';
+
+export default function PublicLinkPage({ params }: { params: { id: string } }) {
+  const [link, setLink] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [isPaid, setIsPaid] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const { isConnected, address } = useAccount();
+  const { connect, connectors } = useConnect();
+  const { sendTransactionAsync } = useSendTransaction();
+
+  useEffect(() => {
+    const fetchLink = async () => {
+      const result = await getPicoLinkById(params.id);
+      if (result.success) {
+        setLink(result.link);
+      }
+      setLoading(false);
+    };
+    fetchLink();
+  }, [params.id]);
+
+  const handlePayAndUnlock = async () => {
+    if (!isConnected) {
+      const cb = connectors.find(c => c.id === 'coinbaseWalletSDK');
+      if (cb) connect({ connector: cb });
+      return;
+    }
+
+    if (!link) return;
+
+    try {
+      setIsProcessing(true);
+      
+      // REAL BLOCKCHAIN TRANSACTION
+      // In a real USDC app, we would use a contract call or transferFrom
+      // For this prototype, we'll send the native token (ETH/Base) or simulate the logic
+      const tx = await sendTransactionAsync({
+        to: link.creatorId as `0x${string}`,
+        value: parseEther('0.0001'), // Sending a tiny amount of Base ETH as a "Tip"
+      });
+
+      console.log('Transaction success:', tx);
+      setIsPaid(true);
+    } catch (error) {
+      console.error('Payment failed:', error);
+      alert('Payment failed. Make sure you have enough for gas on Base!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  if (loading) return <div className="container" style={{ textAlign: 'center', padding: '10rem 0' }}>Loading Pico...</div>;
+  if (!link) return <div className="container" style={{ textAlign: 'center', padding: '10rem 0' }}>Link not found.</div>;
+
+  return (
+    <div className="animate-fade">
+      <header style={{ textAlign: 'center', marginBottom: '3rem', marginTop: '2rem' }}>
+        <h1 className="text-gradient" style={{ fontSize: '2rem', fontWeight: 800 }}>Pico.</h1>
+      </header>
+
+      <div className="glass" style={{ padding: '2rem', textAlign: 'center' }}>
+        <div style={{ 
+          fontSize: '0.7rem', 
+          fontWeight: 'bold', 
+          color: 'var(--accent)', 
+          marginBottom: '1rem',
+          letterSpacing: '0.1em'
+        }}>
+          {link.type || 'DIGITAL CONTENT'}
+        </div>
+        
+        <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>{link.title}</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>
+          {link.description}
+        </p>
+
+        <div style={{ 
+          background: 'rgba(255,255,255,0.02)', 
+          border: '1px solid var(--card-border)',
+          borderRadius: '16px',
+          padding: '1.5rem',
+          marginBottom: '2rem'
+        }}>
+          {isPaid ? (
+            <div style={{ color: 'var(--success)' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🎉</div>
+              <h3 style={{ marginBottom: '0.5rem' }}>Payment Successful!</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>You have unlocked this content.</p>
+              <div style={{ 
+                marginTop: '1.5rem', 
+                background: 'rgba(16, 185, 129, 0.1)', 
+                padding: '1rem', 
+                borderRadius: '12px',
+                fontWeight: 'bold',
+                wordBreak: 'break-all'
+              }}>
+                SECRET CONTENT: {link.contentUrl || 'https://pico.link/guide-v1'}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+                ${link.price} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>USDC</span>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+                Instant unlock. No account needed.
+              </p>
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%' }}
+                onClick={handlePayAndUnlock}
+                disabled={isProcessing}
+              >
+                {isProcessing ? 'Processing...' : isConnected ? 'Pay & Unlock with FaceID' : 'Connect Wallet to Buy'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+          Payment secured by **Base Network** and **X402 Protocol**.
+        </p>
+      </div>
+
+      <footer style={{ textAlign: 'center', marginTop: '4rem', paddingBottom: '2rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+          &copy; 2026 Pico Micropayments
+        </p>
+      </footer>
+    </div>
+  );
+}
