@@ -4,18 +4,24 @@ import React, { useState, useEffect } from 'react';
 import { useAccount, useConnect, useSendTransaction } from 'wagmi';
 import { parseEther } from 'viem';
 import { getPicoLinkById } from '@/app/actions/pico';
+import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 
 export default function PublicLinkPage({ params }: { params: { id: string } }) {
   const [link, setLink] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isPaid, setIsPaid] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isIAB, setIsIAB] = useState(false);
+  const [browserName, setBrowserName] = useState('');
 
   const { isConnected, address } = useAccount();
   const { connect, connectors } = useConnect();
   const { sendTransactionAsync } = useSendTransaction();
 
   useEffect(() => {
+    setIsIAB(isInAppBrowser());
+    setBrowserName(getBrowserName());
+    
     const fetchLink = async () => {
       const result = await getPicoLinkById(params.id);
       if (result.success) {
@@ -114,12 +120,20 @@ export default function PublicLinkPage({ params }: { params: { id: string } }) {
               </p>
               <button 
                 className="btn btn-primary" 
-                style={{ width: '100%' }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
                 onClick={handlePayAndUnlock}
                 disabled={isProcessing}
               >
-                {isProcessing ? 'Processing...' : isConnected ? 'Pay & Unlock with FaceID' : 'Connect Wallet to Buy'}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                {isProcessing ? 'Verifying...' : isConnected ? (isIAB ? 'Secure One-Click Pay' : 'Pay & Unlock with FaceID') : 'Secure Checkout'}
               </button>
+              
+              {isIAB && (
+                <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Verified {browserName} Checkout</span>
+                </div>
+              )}
             </div>
           )}
         </div>
