@@ -4,9 +4,18 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useConnect, useAccount } from 'wagmi';
-import { getPicoLinks, getCreatorEarnings } from '@/app/actions/pico';
+import { getPicoLinks, getCreatorEarnings, getPerLinkStats, getRecentActivity, getUSDCtoGBP } from '@/app/actions/pico';
+import { calculateFeeBps } from '@/lib/constants';
 import { getUserById, updateWalletAddress } from '@/app/actions/auth';
 import { PicoLink } from '@/db/schema';
+
+function timeAgo(date: Date): string {
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 export default function CreatorDashboard() {
   const { data: session, status } = useSession();
@@ -19,6 +28,9 @@ export default function CreatorDashboard() {
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [totalEarnings, setTotalEarnings] = useState('0.00');
   const [totalSales, setTotalSales] = useState(0);
+  const [perLinkStats, setPerLinkStats] = useState<Record<string, { sales: number; earned: string }>>({});
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [gbpRate, setGbpRate] = useState(0.78);
 
   const [isCashOutOpen, setIsCashOutOpen] = useState(false);
   const [cashOutStep, setCashOutStep] = useState(1);
@@ -47,12 +59,21 @@ export default function CreatorDashboard() {
         setItems(linksResult.links || []);
       }
 
-      // Fetch earnings
-      const earningsResult = await getCreatorEarnings(userId);
+      // Fetch earnings, per-link stats, recent activity, GBP rate in parallel
+      const [earningsResult, statsResult, activityResult, rateResult] = await Promise.all([
+        getCreatorEarnings(userId),
+        getPerLinkStats(userId),
+        getRecentActivity(userId, 10),
+        getUSDCtoGBP(),
+      ]);
+
       if (earningsResult.success) {
         setTotalEarnings(earningsResult.totalEarnings);
         setTotalSales(earningsResult.totalSales);
       }
+      if (statsResult.success) setPerLinkStats(statsResult.stats);
+      if (activityResult.success) setRecentActivity(activityResult.activity);
+      if (rateResult.success) setGbpRate(rateResult.rate);
 
       setLoading(false);
     };
@@ -179,17 +200,56 @@ export default function CreatorDashboard() {
         </div>
       )}
 
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
+      {/* Stats — top row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
         <div className="glass" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)' }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>Total Earnings</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{totalEarnings} <span style={{ fontSize: '1rem', fontWeight: 400, color: 'var(--text-muted)' }}>USDC</span></div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Net Earnings</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.1 }}>
+            ${(Number(totalEarnings) * 0.95).toFixed(2)}
+            <span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'var(--text-muted)' }}> USDC</span>
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            ≈ £{(Number(totalEarnings) * 0.95 * gbpRate).toFixed(2)} GBP
+          </div>
         </div>
         <div className="glass" style={{ padding: '1.5rem' }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>Total Sales</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{totalSales}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Total Sales</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800 }}>{totalSales}</div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            {items.length} active link{items.length === 1 ? '' : 's'}
+          </div>
         </div>
       </div>
+
+      {/* Earnings breakdown — gross / fee / net so creators see the real numbers */}
+      {Number(totalEarnings) > 0 && (
+        <div className="glass" style={{ padding: '1.25rem', marginBottom: '2rem' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', fontWeight: 600 }}>
+            💰 Earnings Breakdown
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.8rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Gross sales</span>
+              <span>${Number(totalEarnings).toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Pico fee (5%)</span>
+              <span style={{ color: '#f87171' }}>−${(Number(totalEarnings) * 0.05).toFixed(3)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Network gas (est.)</span>
+              <span style={{ color: '#f87171' }}>−${(0.001 * totalSales).toFixed(3)}</span>
+            </div>
+            <div style={{ height: '1px', background: 'var(--card-border)', margin: '0.4rem 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+              <span>Net to your wallet</span>
+              <span style={{ color: 'var(--success)' }}>
+                ${(Number(totalEarnings) * 0.95 - 0.001 * totalSales).toFixed(3)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Links Table */}
       <div className="glass" style={{ padding: '1.5rem' }}>
@@ -202,31 +262,42 @@ export default function CreatorDashboard() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {items.length > 0 ? (
-            items.map((item) => (
-              <div key={item.id} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '1rem',
-                background: 'rgba(255,255,255,0.02)',
-                borderRadius: '12px',
-                border: '1px solid var(--card-border)'
-              }}>
-                <div>
-                  <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.title}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>${item.price}</div>
+            items.map((item) => {
+              const s = perLinkStats[item.id] || { sales: 0, earned: '0.00' };
+              const feePct = Number(calculateFeeBps(Number(item.price))) / 100;
+              return (
+                <div key={item.id} style={{
+                  padding: '1rem',
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: '12px',
+                  border: '1px solid var(--card-border)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.title}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.15rem' }}>
+                        ${item.price} · {feePct}% fee
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', fontSize: '0.7rem', flexWrap: 'wrap' }}>
+                        <span style={{ color: s.sales > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
+                          💰 {s.sales} sale{s.sales === 1 ? '' : 's'}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          📈 ${Number(s.earned).toFixed(2)} earned
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', flexShrink: 0 }}
+                      onClick={() => handleCopy(item.id)}
+                    >
+                      Copy Link
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem' }}
-                    onClick={() => handleCopy(item.id)}
-                  >
-                    Copy Link
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>You haven&apos;t created any Pico links yet.</p>
@@ -235,6 +306,41 @@ export default function CreatorDashboard() {
           )}
         </div>
       </div>
+
+      {/* Recent Activity Feed */}
+      {recentActivity.length > 0 && (
+        <div className="glass" style={{ padding: '1.5rem', marginTop: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Recent Activity</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {recentActivity.map((event) => {
+              const when = event.createdAt ? new Date(event.createdAt) : null;
+              const ago = when ? timeAgo(when) : '';
+              const net = (Number(event.amount) * 0.95).toFixed(3);
+              return (
+                <div key={event.id} style={{
+                  padding: '0.75rem',
+                  background: 'rgba(16, 185, 129, 0.05)',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(16, 185, 129, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                      🟢 Sale ${Number(event.amount).toFixed(2)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {event.title}</span>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                      Net ${net} → your wallet · {ago}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Cash Out Footer */}
       <footer style={{ marginTop: '3rem', paddingBottom: '3rem' }}>

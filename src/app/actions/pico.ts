@@ -143,11 +143,84 @@ export async function getLinkSalesCount(linkId: string) {
     const result = await db
       .select({ count: sql<number>`COUNT(${payments.id})` })
       .from(payments)
-      .where(eq(payments.id, linkId)); // Fix comparison column to payments.linkId if needed, but schema is fine.
+      .where(eq(payments.id, linkId));
 
     return result[0]?.count || 0;
   } catch (error) {
     console.error('Failed to fetch sales count:', error);
     return 0;
+  }
+}
+
+// Per-link aggregate stats (sales count + total earned) for a creator's dashboard.
+export async function getPerLinkStats(creatorId: string) {
+  try {
+    const rows = await db
+      .select({
+        linkId: payments.linkId,
+        count: sql<number>`COUNT(${payments.id})`,
+        total: sql<string>`COALESCE(SUM(${payments.amount}), '0.00')`,
+      })
+      .from(payments)
+      .innerJoin(picoLinks, eq(payments.linkId, picoLinks.id))
+      .where(eq(picoLinks.creatorId, creatorId))
+      .groupBy(payments.linkId);
+
+    const stats: Record<string, { sales: number; earned: string }> = {};
+    for (const r of rows) {
+      stats[r.linkId] = { sales: Number(r.count), earned: r.total };
+    }
+    return { success: true, stats };
+  } catch (error) {
+    console.error('Failed to fetch per-link stats:', error);
+    return { success: false, stats: {} };
+  }
+}
+
+// Recent payments for the activity feed (last 10 by default).
+export async function getRecentActivity(creatorId: string, limit = 10) {
+  try {
+    const rows = await db
+      .select({
+        id: payments.id,
+        linkId: payments.linkId,
+        amount: payments.amount,
+        txHash: payments.txHash,
+        createdAt: payments.createdAt,
+        title: picoLinks.title,
+      })
+      .from(payments)
+      .innerJoin(picoLinks, eq(payments.linkId, picoLinks.id))
+      .where(eq(picoLinks.creatorId, creatorId))
+      .orderBy(sql`${payments.createdAt} DESC`)
+      .limit(limit);
+
+    const serialized = rows.map((r) => ({
+      ...r,
+      createdAt: r.createdAt ? r.createdAt.toISOString() : null,
+    }));
+    return { success: true, activity: serialized };
+  } catch (error) {
+    console.error('Failed to fetch recent activity:', error);
+    return { success: false, activity: [] };
+  }
+}
+
+// Live USDC → GBP rate via Coinbase's public spot API, cached 60s server-side.
+let gbpRateCache: { rate: number; ts: number } | null = null;
+export async function getUSDCtoGBP() {
+  try {
+    if (gbpRateCache && Date.now() - gbpRateCache.ts < 60_000) {
+      return { success: true, rate: gbpRateCache.rate };
+    }
+    const res = await fetch('https://api.coinbase.com/v2/prices/USDC-GBP/spot', {
+      next: { revalidate: 60 },
+    });
+    const json = await res.json();
+    const rate = Number(json?.data?.amount) || 0.78;
+    gbpRateCache = { rate, ts: Date.now() };
+    return { success: true, rate };
+  } catch {
+    return { success: true, rate: 0.78 };
   }
 }
