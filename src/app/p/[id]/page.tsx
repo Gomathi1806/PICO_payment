@@ -7,6 +7,7 @@ import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment } from '@/app/
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
+import { FundCard } from '@coinbase/onchainkit/fund';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
@@ -22,6 +23,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const [step, setStep] = useState<'idle' | 'connecting' | 'paying' | 'done'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showFundCard, setShowFundCard] = useState(false);
 
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -243,20 +245,15 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
-  // Helper to open Coinbase Smart Wallet portal
+  // Show the inline FundCard (Apple Pay / Google Pay / Card via Coinbase Onramp).
+  // For testnet, route to Circle faucet instead since onramp is mainnet-only.
   const handlePreFund = () => {
     if (!address) return;
-    
-    // For testnet, link directly to Circle Faucet
     if (chainId === 84532) {
       window.open('https://faucet.circle.com/', '_blank');
       return;
     }
-
-    // Direct user to their official Coinbase Smart Wallet dashboard.
-    // This is Coinbase's secure, official portal where they can click "Buy"
-    // to add USDC via Card/Apple Pay without needing any custom sessionTokens or keys.
-    window.open('https://keys.coinbase.com/', '_blank');
+    setShowFundCard(true);
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '10rem 0' }}>Loading Pico...</div>;
@@ -363,8 +360,37 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 </div>
               )}
 
+              {/* Inline Apple Pay / Google Pay / Card via Coinbase Onramp */}
+              {isConnected && showFundCard && address && chainId !== 84532 && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <FundCard
+                    assetSymbol="USDC"
+                    country="GB"
+                    currency="GBP"
+                    presetAmountInputs={[
+                      Math.max(Number(link.price), 5).toFixed(2),
+                      '10',
+                      '20',
+                    ]}
+                    headerText="Add USDC with Apple Pay or Card"
+                    buttonText="Buy USDC"
+                    onSuccess={() => {
+                      refetchBalance();
+                      setShowFundCard(false);
+                    }}
+                  />
+                  <button
+                    onClick={() => setShowFundCard(false)}
+                    className="btn btn-secondary"
+                    style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.75rem', padding: '0.5rem' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
               {/* Pre-Fund Wallet Credits (Credits Model) */}
-              {isConnected && (
+              {isConnected && !showFundCard && (
                 <div style={{
                   background: 'rgba(255, 255, 255, 0.02)',
                   border: '1px solid var(--card-border)',
@@ -377,14 +403,14 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                     🔋 Pre-Fund Wallet Credits (Save Card Fees)
                   </div>
                   <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.8rem', lineHeight: '1.3' }}>
-                    Avoid card fees on individual purchases. Load credits once to unlock future items instantly. Opens your secure wallet portal in a new tab.
+                    Add USDC via Apple Pay, Google Pay or card — no account needed. Inline checkout, no redirect.
                   </p>
-                  <button 
+                  <button
                     onClick={handlePreFund}
-                    className="btn btn-secondary" 
+                    className="btn btn-secondary"
                     style={{ width: '100%', padding: '0.75rem', fontSize: '0.8rem', borderRadius: '8px' }}
                   >
-                    {chainId === 84532 ? '🔗 Get Free Faucet USDC' : '🔗 Open Wallet Portal & Add Funds'}
+                    {chainId === 84532 ? '🔗 Get Free Faucet USDC' : '🍎 Add Funds with Apple Pay / Card'}
                   </button>
                 </div>
               )}

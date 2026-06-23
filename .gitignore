@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local notes / scratch / office temp files
+/Notes
+*.docx
+~$*
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
