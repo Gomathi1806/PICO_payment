@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 
 export default function LandingPage() {
   return (
@@ -23,8 +24,12 @@ export default function LandingPage() {
           Sell small wins for small prices. The Link-in-Bio tool for creators.
         </p>
         <div style={{ marginTop: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <button className="btn btn-primary">Claim your handle</button>
-          <button className="btn btn-secondary">See a demo</button>
+          <Link href="/signup" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+            Claim your handle
+          </Link>
+          <Link href="/creator/alex_ai_art" className="btn btn-secondary" style={{ textDecoration: 'none' }}>
+            See a demo
+          </Link>
         </div>
       </header>
 
@@ -34,7 +39,7 @@ export default function LandingPage() {
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             <div>
-              <div style={{ color: 'var(--accent)', fontWeight: 'bold', marginBottom: '0.5rem' }}>01. No "Platform Tax"</div>
+              <div style={{ color: 'var(--accent)', fontWeight: 'bold', marginBottom: '0.5rem' }}>01. No &ldquo;Platform Tax&rdquo;</div>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                 Keep 98% of your revenue. No 30% Apple tax. No high Stripe fixed fees.
               </p>
@@ -43,7 +48,7 @@ export default function LandingPage() {
             <div>
               <div style={{ color: 'var(--accent)', fontWeight: 'bold', marginBottom: '0.5rem' }}>02. X402 Powered</div>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                The web's native payment protocol. Instant unlocks, near-zero gas on Base.
+                The web&rsquo;s native payment protocol. Instant unlocks, near-zero gas on Base.
               </p>
             </div>
             

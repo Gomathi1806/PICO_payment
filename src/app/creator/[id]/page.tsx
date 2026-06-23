@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, use } from 'react';
 
 const ITEMS = [
   { id: 1, title: 'Top 5 Midjourney Prompts', price: '$0.50', description: 'The exact prompts I used for my viral cyberpunk series.', type: 'PDF' },
@@ -8,7 +8,10 @@ const ITEMS = [
   { id: 3, title: 'Lighting Setup for Reels', price: '$1.00', description: 'A video walkthrough of my 3-point lighting setup.', type: 'Video' },
 ];
 
-export default function CreatorProfile({ params }: { params: { id: string } }) {
+export default function CreatorProfile(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params);
+  const id = params.id;
+
   const [unlocked, setUnlocked] = useState<number[]>([]);
   const [loading, setLoading] = useState<number | null>(null);
 
@@ -37,7 +40,7 @@ export default function CreatorProfile({ params }: { params: { id: string } }) {
         }}>
           🎨
         </div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>@alex_ai_art</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>@{id}</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
           Teaching you how to master generative art. 🚀
         </p>

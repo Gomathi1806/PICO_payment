@@ -1,16 +1,18 @@
 import { http, createConfig } from 'wagmi';
-import { base } from 'wagmi/chains';
+import { base, baseSepolia } from 'wagmi/chains';
 import { coinbaseWallet } from 'wagmi/connectors';
 
 export const config = createConfig({
-  chains: [base],
+  chains: [base, baseSepolia],
   connectors: [
-    coinbaseWallet({ 
+    coinbaseWallet({
       appName: 'Pico',
-      preference: 'smartWalletOnly', // This forces the "Invisible Wallet" / FaceID experience
+      preference: { options: 'smartWalletOnly' }, // Forces FaceID/Passkey — no MetaMask, no seed phrases
     }),
   ],
   transports: {
-    [base.id]: http(),
+    // Using fast, official RPC nodes to prevent "Fetching balances" loading hangs
+    [base.id]: http('https://mainnet.base.org'),
+    [baseSepolia.id]: http('https://sepolia.base.org'),
   },
 });
