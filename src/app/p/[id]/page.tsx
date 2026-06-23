@@ -487,20 +487,22 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 </div>
               )}
 
-              {/* PRIMARY CTA — Coinbase Smart Wallet / FaceID only */}
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', fontSize: '1rem', padding: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                onClick={isConnected && !isBalanceSufficient ? handlePreFund : handlePayAndUnlock}
-                disabled={isProcessing}
-              >
-                {isProcessing ? (
-                  <>
-                    <div style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                    {buttonLabel()}
-                  </>
-                ) : buttonLabel()}
-              </button>
+              {/* PRIMARY CTA — hidden while FundCard is open to avoid duplicate buttons */}
+              {!showFundCard && (
+                <button
+                  className="btn btn-primary"
+                  style={{ width: '100%', fontSize: '1rem', padding: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                  onClick={isConnected && !isBalanceSufficient ? handlePreFund : handlePayAndUnlock}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <>
+                      <div style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                      {buttonLabel()}
+                    </>
+                  ) : buttonLabel()}
+                </button>
+              )}
 
               {/* Trust badges */}
               <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
