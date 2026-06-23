@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, use } from 'react';
-import { useConnect, useWriteContract, useAccount, useReadContract, useChainId, useSwitchChain, useDisconnect } from 'wagmi';
-import { parseUnits } from 'viem';
+import { useConnect, useWriteContract, useAccount, useReadContract, useChainId, useSwitchChain, useDisconnect, useSendCalls } from 'wagmi';
+import { parseUnits, encodeFunctionData } from 'viem';
 import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment } from '@/app/actions/pico';
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
-import { ERC20_ABI, getUSDCConfig } from '@/lib/constants';
+import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
@@ -27,6 +27,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const { writeContractAsync } = useWriteContract();
+  const { sendCallsAsync } = useSendCalls();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
 
@@ -83,13 +84,19 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     fetchLink();
   }, [id]);
 
-  // Once connected after user tapped "Pay", execute transaction
+  // Once connected after user tapped "Pay", execute transaction ONLY if balance is sufficient.
+  // Otherwise drop the user into the "add funds" state instead of opening the wallet to fail.
   useEffect(() => {
     if (isConnected && step === 'connecting') {
-      executePay();
+      if (isBalanceSufficient) {
+        executePay();
+      } else {
+        setStep('idle');
+        setIsProcessing(false);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, step]);
+  }, [isConnected, step, isBalanceSufficient]);
 
   const executePay = async () => {
     if (!link || !creatorWallet) return;
@@ -101,16 +108,62 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     refetchBalance();
 
     try {
-      // Convert price to USDC amount (6 decimals)
+      // Convert price to USDC base units, then split 95/5 between creator and Pico treasury.
       const usdcAmount = parseUnits(link.price, usdcConfig.decimals);
+      const { fee, creatorAmount } = splitFee(usdcAmount, Number(link.price));
+      const treasuryEnabled = PICO_TREASURY_ADDRESS !== '0x0000000000000000000000000000000000000000' && fee > 0n;
 
-      // Send USDC via ERC-20 transfer.
-      const tx = await writeContractAsync({
-        address: usdcConfig.address,
-        abi: ERC20_ABI,
-        functionName: 'transfer',
-        args: [creatorWallet as `0x${string}`, usdcAmount],
-      });
+      let tx: string;
+
+      if (treasuryEnabled) {
+        // Batched: one FaceID, two atomic transfers (creator + Pico fee).
+        // Coinbase Smart Wallet supports EIP-5792 wallet_sendCalls natively.
+        try {
+          const result = await sendCallsAsync({
+            calls: [
+              {
+                to: usdcConfig.address,
+                data: encodeFunctionData({
+                  abi: ERC20_ABI,
+                  functionName: 'transfer',
+                  args: [creatorWallet as `0x${string}`, creatorAmount],
+                }),
+              },
+              {
+                to: usdcConfig.address,
+                data: encodeFunctionData({
+                  abi: ERC20_ABI,
+                  functionName: 'transfer',
+                  args: [PICO_TREASURY_ADDRESS, fee],
+                }),
+              },
+            ],
+          });
+          tx = typeof result === 'string' ? result : (result as { id: string }).id;
+        } catch (batchErr) {
+          console.warn('Batched call failed, falling back to sequential transfers:', batchErr);
+          await writeContractAsync({
+            address: usdcConfig.address,
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [creatorWallet as `0x${string}`, creatorAmount],
+          });
+          tx = await writeContractAsync({
+            address: usdcConfig.address,
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [PICO_TREASURY_ADDRESS, fee],
+          });
+        }
+      } else {
+        // No treasury configured — send full amount to creator (dev mode).
+        tx = await writeContractAsync({
+          address: usdcConfig.address,
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [creatorWallet as `0x${string}`, usdcAmount],
+        });
+      }
 
       console.log('Transaction success:', tx);
 
@@ -174,6 +227,13 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
       return;
     }
 
+    // Block the loop: if balance is too low, route to fund flow instead of opening
+    // the wallet only for it to reject with "insufficient funds".
+    if (!isBalanceSufficient) {
+      setErrorMessage(`You need ${link.price} USDC. Tap "Add Funds" below, then refresh your balance.`);
+      return;
+    }
+
     await executePay();
   };
 
@@ -205,8 +265,10 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const buttonLabel = () => {
     if (isProcessing && step === 'connecting') return 'Opening wallet...';
     if (isProcessing && step === 'paying') return 'Confirming payment...';
+    if (!isConnected) return `🔒 Unlock with FaceID — $${link.price} USDC`;
+    if (!isBalanceSufficient) return `💳 Add Funds to Pay $${link.price}`;
     if (isIAB) return `🔒 Secure One-Click Pay — $${link.price}`;
-    return `🔒 Unlock with FaceID — $${link.price} USDC`;
+    return `✅ Pay $${link.price} USDC`;
   };
 
   return (
@@ -403,7 +465,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
               <button
                 className="btn btn-primary"
                 style={{ width: '100%', fontSize: '1rem', padding: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                onClick={handlePayAndUnlock}
+                onClick={isConnected && !isBalanceSufficient ? handlePreFund : handlePayAndUnlock}
                 disabled={isProcessing}
               >
                 {isProcessing ? (
