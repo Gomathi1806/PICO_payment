@@ -33,9 +33,6 @@ export default function CreatorDashboard() {
   const [gbpRate, setGbpRate] = useState(0.78);
 
   const [isCashOutOpen, setIsCashOutOpen] = useState(false);
-  const [cashOutStep, setCashOutStep] = useState(1);
-  const [cashOutAmount, setCashOutAmount] = useState('10.00');
-  const [selectedBank, setSelectedBank] = useState('Chase Checking (*8821)');
 
   const userId = session?.user?.id;
   const handle = session?.user?.name;
@@ -358,7 +355,7 @@ export default function CreatorDashboard() {
         </div>
       </footer>
 
-      {/* Cash Out Modal */}
+      {/* Cash Out Modal — honest Coming Soon with manual workaround */}
       {isCashOutOpen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -366,80 +363,76 @@ export default function CreatorDashboard() {
           display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '1.5rem',
         }}>
           <div className="glass animate-fade" style={{
-            maxWidth: '400px', width: '100%', padding: '2rem',
+            maxWidth: '460px', width: '100%', padding: '2rem',
             border: '1px solid rgba(59, 130, 246, 0.2)',
             boxShadow: '0 10px 30px rgba(59, 130, 246, 0.1)', background: 'rgba(10, 10, 12, 0.95)',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '1.2rem' }}>🔵</span>
-                <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#3b82f6' }}>Coinbase Pay Off-ramp</span>
+                <span style={{ fontSize: '1.2rem' }}>🏦</span>
+                <span style={{ fontWeight: 'bold', fontSize: '1rem' }}>Cash Out to Bank</span>
               </div>
-              <button onClick={() => { setIsCashOutOpen(false); setCashOutStep(1); }}
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.2rem', cursor: 'pointer' }}>
+              <button onClick={() => setIsCashOutOpen(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1 }}>
                 &times;
               </button>
             </div>
 
-            {cashOutStep === 1 && (
-              <div>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                  Cash out your accrued USDC balance directly to your bank account as USD.
-                </p>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>AMOUNT TO CASH OUT (USDC)</label>
-                  <div style={{ position: 'relative' }}>
-                    <input type="number" value={cashOutAmount} onChange={(e) => setCashOutAmount(e.target.value)}
-                      style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--card-border)', padding: '1rem 1rem 1rem 2.5rem', borderRadius: '12px', color: 'white', fontSize: '1rem', outline: 'none' }} />
-                    <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
-                  </div>
-                </div>
-                <div style={{ marginBottom: '2rem' }}>
-                  <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>DESTINATION BANK ACCOUNT</label>
-                  <select value={selectedBank} onChange={(e) => setSelectedBank(e.target.value)}
-                    style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--card-border)', padding: '1rem', borderRadius: '12px', color: 'white', fontSize: '0.9rem', outline: 'none', cursor: 'pointer' }}>
-                    <option value="Chase Checking (*8821)" style={{ background: '#0a0a0c' }}>Chase Checking (*8821)</option>
-                    <option value="Wells Fargo Savings (*4412)" style={{ background: '#0a0a0c' }}>Wells Fargo Savings (*4412)</option>
-                    <option value="Bank of America (*9930)" style={{ background: '#0a0a0c' }}>Bank of America (*9930)</option>
-                  </select>
-                </div>
-                <button onClick={() => setCashOutStep(2)} className="btn btn-primary" style={{ width: '100%' }}>Review Cash Out</button>
+            <div style={{
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              borderRadius: '12px',
+              padding: '0.9rem 1rem',
+              marginBottom: '1.25rem',
+              fontSize: '0.8rem',
+              color: '#fbbf24',
+              lineHeight: 1.4,
+            }}>
+              ⏳ <b>One-click bank cashout coming soon.</b> We&apos;re integrating Transak&apos;s
+              UK Faster Payments off-ramp (0.99% fee, ~1 hour to your bank). Available
+              once our Transak production approval comes through.
+            </div>
+
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', fontWeight: 600 }}>
+              For now — withdraw manually in 4 steps:
+            </div>
+            <ol style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6, paddingLeft: '1.2rem', marginBottom: '1.5rem' }}>
+              <li>Open your <b style={{ color: 'white' }}>Coinbase Wallet</b> (the same one connected to Pico)</li>
+              <li>Send your USDC to <b style={{ color: 'white' }}>your Coinbase.com account</b> (same email — instant, no fee)</li>
+              <li>On Coinbase.com, sell USDC → GBP at spot rate</li>
+              <li>Withdraw GBP to your bank via Faster Payments (free, ~30 min)</li>
+            </ol>
+
+            {walletAddress && (
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--card-border)',
+                borderRadius: '10px',
+                padding: '0.75rem',
+                marginBottom: '1.25rem',
+                fontSize: '0.7rem',
+                fontFamily: 'monospace',
+                color: 'var(--text-muted)',
+                wordBreak: 'break-all',
+              }}>
+                Your wallet: {walletAddress}
               </div>
             )}
 
-            {cashOutStep === 2 && (
-              <div>
-                <h3 style={{ fontSize: '1rem', marginBottom: '1rem', textAlign: 'center' }}>Confirm Transfer</h3>
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--card-border)', borderRadius: '16px', padding: '1rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.85rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Selling</span><span>{cashOutAmount} USDC</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Receiving</span><span style={{ fontWeight: 'bold', color: 'var(--success)' }}>${cashOutAmount} USD</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Destination</span><span>{selectedBank}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Transfer Fee</span><span style={{ color: 'var(--success)' }}>$0.00 (Sponsored)</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Speed</span><span>Instant ACH</span></div>
-                </div>
-                <button onClick={() => { setCashOutStep(3); setTimeout(() => setCashOutStep(4), 2000); }} className="btn btn-primary" style={{ width: '100%', marginBottom: '0.5rem' }}>Confirm &amp; Transfer</button>
-                <button onClick={() => setCashOutStep(1)} className="btn btn-secondary" style={{ width: '100%' }}>Back</button>
-              </div>
-            )}
-
-            {cashOutStep === 3 && (
-              <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                <div style={{ width: '40px', height: '40px', border: '3px solid rgba(59, 130, 246, 0.2)', borderTop: '3px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 1.5rem' }}></div>
-                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Processing Off-ramp...</h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Routing via Instant ACH.</p>
-              </div>
-            )}
-
-            {cashOutStep === 4 && (
-              <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', margin: '0 auto 1.2rem' }}>✓</div>
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--success)' }}>Transfer Successful!</h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                  ${cashOutAmount} USD has been sent to your {selectedBank.split(' ')[0]} bank account.
-                </p>
-                <button onClick={() => { setIsCashOutOpen(false); setCashOutStep(1); }} className="btn btn-primary" style={{ width: '100%' }}>Back to Dashboard</button>
-              </div>
-            )}
+            <button
+              onClick={() => window.open('https://www.coinbase.com/price/usd-coin', '_blank')}
+              className="btn btn-primary"
+              style={{ width: '100%', marginBottom: '0.5rem', fontSize: '0.85rem' }}
+            >
+              Open Coinbase to Sell USDC →
+            </button>
+            <button
+              onClick={() => setIsCashOutOpen(false)}
+              className="btn btn-secondary"
+              style={{ width: '100%', fontSize: '0.8rem' }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

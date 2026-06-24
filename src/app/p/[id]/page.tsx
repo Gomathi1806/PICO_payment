@@ -179,6 +179,23 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
 
       setIsPaid(true);
       setStep('done');
+
+      // If this checkout was opened from a publisher's embed.js paywall,
+      // notify the parent window so it can reveal the gated content and
+      // optionally auto-close the popup after a short success display.
+      try {
+        if (typeof window !== 'undefined' && window.opener && !window.opener.closed) {
+          window.opener.postMessage(
+            { type: 'pico:unlock', linkId: link.id, txHash: tx },
+            '*'
+          );
+          setTimeout(() => {
+            try { window.close(); } catch { /* ignore */ }
+          }, 2500);
+        }
+      } catch {
+        /* postMessage failed — non-fatal, user still sees success UI */
+      }
     } catch (error: unknown) {
       console.error('Payment failed:', error);
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
