@@ -3,7 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { useConnect, useWriteContract, useAccount, useReadContract, useChainId, useSwitchChain, useDisconnect, useSendCalls } from 'wagmi';
 import { parseUnits, encodeFunctionData } from 'viem';
-import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment } from '@/app/actions/pico';
+import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment, getUnlockedContent } from '@/app/actions/pico';
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
@@ -24,6 +24,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFundCard, setShowFundCard] = useState(false);
+  const [unlockedUrl, setUnlockedUrl] = useState<string | null>(null);
 
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -180,6 +181,21 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
       setIsPaid(true);
       setStep('done');
 
+      // Fetch the gated content URL — only returned by the server if
+      // the payment record matches the tx hash + payer address.
+      try {
+        const unlocked = await getUnlockedContent(
+          link.id,
+          tx,
+          address || 'unknown',
+        );
+        if (unlocked.success && unlocked.contentUrl) {
+          setUnlockedUrl(unlocked.contentUrl);
+        }
+      } catch (e) {
+        console.error('Could not fetch unlocked content:', e);
+      }
+
       // If this checkout was opened from a publisher's embed.js paywall,
       // notify the parent window so it can reveal the gated content and
       // optionally auto-close the popup after a short success display.
@@ -322,7 +338,16 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 background: 'rgba(16, 185, 129, 0.1)', padding: '1rem',
                 borderRadius: '12px', fontWeight: 'bold', wordBreak: 'break-all'
               }}>
-                {link.contentUrl || 'https://pico.link/guide-v1'}
+                {unlockedUrl ? (
+                  <a href={unlockedUrl} target="_blank" rel="noopener noreferrer"
+                     style={{ color: 'var(--success)', textDecoration: 'underline' }}>
+                    {unlockedUrl}
+                  </a>
+                ) : (
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                    Fetching your content…
+                  </span>
+                )}
               </div>
             </div>
           ) : (

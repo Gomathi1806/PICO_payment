@@ -48,6 +48,11 @@ export async function getPicoLinks(creatorId: string) {
   }
 }
 
+// Public lookup for the unlock page. Must NEVER include contentUrl —
+// the gated content is fetched separately via getUnlockedContent only
+// after the caller proves they paid. Also strips URLs from the
+// description as defence-in-depth in case the creator mispasted the
+// gated link into the teaser field.
 export async function getPicoLinkById(id: string) {
   try {
     const link = await db.query.picoLinks.findFirst({
@@ -56,17 +61,63 @@ export async function getPicoLinkById(id: string) {
 
     if (!link) return { success: true, link: null };
 
-    // Convert Date object to ISO string to prevent client-side serialization errors
-    const serializedLink = {
-      ...link,
-      createdAt: link.createdAt ? link.createdAt.toISOString() : null,
-    };
+    const { contentUrl: _hidden, description, ...safe } = link;
+    const sanitizedDescription = stripUrls(description || '');
 
-    return { success: true, link: serializedLink };
+    return {
+      success: true,
+      link: {
+        ...safe,
+        description: sanitizedDescription,
+        createdAt: link.createdAt ? link.createdAt.toISOString() : null,
+      },
+    };
   } catch (error) {
     console.error('Failed to fetch pico link:', error);
     return { success: false, link: null };
   }
+}
+
+// Returns the gated contentUrl only if a payment record exists for this
+// link with a matching txHash and payer address. This is a defence-in-
+// depth check, not a full chain verification — a real attacker would
+// need to know a valid (txHash, payerAddress) pair, which only the
+// actual paying wallet receives back from writeContractAsync.
+export async function getUnlockedContent(
+  linkId: string,
+  txHash: string,
+  payerAddress: string,
+) {
+  try {
+    if (!txHash || !payerAddress) return { success: false, contentUrl: null };
+
+    const payment = await db.query.payments.findFirst({
+      where: (payments, { and, eq }) => and(
+        eq(payments.linkId, linkId),
+        eq(payments.txHash, txHash),
+        eq(payments.payerAddress, payerAddress),
+      ),
+    });
+
+    if (!payment) return { success: false, contentUrl: null };
+
+    const link = await db.query.picoLinks.findFirst({
+      where: (picoLinks, { eq }) => eq(picoLinks.id, linkId),
+    });
+
+    return { success: true, contentUrl: link?.contentUrl ?? null };
+  } catch (error) {
+    console.error('Failed to fetch unlocked content:', error);
+    return { success: false, contentUrl: null };
+  }
+}
+
+// Strip any http(s):// or www. URLs so the teaser description can't
+// accidentally reveal the gated content link.
+function stripUrls(text: string): string {
+  return text
+    .replace(/https?:\/\/\S+/gi, '[link removed — visible after unlock]')
+    .replace(/\bwww\.\S+/gi, '[link removed — visible after unlock]');
 }
 
 // Get the creator's wallet address for a given Pico link
