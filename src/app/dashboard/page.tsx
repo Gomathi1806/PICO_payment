@@ -284,13 +284,22 @@ export default function CreatorDashboard() {
                         </span>
                       </div>
                     </div>
-                    <button
-                      className="btn btn-secondary"
-                      style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', flexShrink: 0 }}
-                      onClick={() => handleCopy(item.id)}
-                    >
-                      Copy Link
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                      <Link
+                        href={`/dashboard/edit/${item.id}`}
+                        className="btn btn-secondary"
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', textDecoration: 'none' }}
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem' }}
+                        onClick={() => handleCopy(item.id)}
+                      >
+                        Copy Link
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

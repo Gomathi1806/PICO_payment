@@ -9,7 +9,9 @@ export async function createPicoLink(data: {
   title: string;
   description: string;
   price: string;
-  creatorId: string; // User UUID
+  creatorId: string;
+  contentUrl?: string;
+  type?: string;
 }) {
   try {
     const result = await db.insert(picoLinks).values({
@@ -17,7 +19,8 @@ export async function createPicoLink(data: {
       description: data.description,
       price: data.price,
       creatorId: data.creatorId,
-      type: 'PDF', // Default for now
+      contentUrl: data.contentUrl || null,
+      type: data.type || 'PDF',
     }).returning({ id: picoLinks.id });
 
     revalidatePath('/dashboard');
@@ -25,6 +28,74 @@ export async function createPicoLink(data: {
   } catch (error) {
     console.error('Failed to create pico link:', error);
     return { success: false, error: 'Database connection failed. Check your DATABASE_URL in .env' };
+  }
+}
+
+// Owner-only fetch — includes contentUrl so creators can edit it.
+// Verifies the link belongs to the requesting creatorId before
+// returning anything, to prevent IDOR (one creator reading another's URLs).
+export async function getPicoLinkForOwner(linkId: string, creatorId: string) {
+  try {
+    const link = await db.query.picoLinks.findFirst({
+      where: (picoLinks, { and, eq }) => and(
+        eq(picoLinks.id, linkId),
+        eq(picoLinks.creatorId, creatorId),
+      ),
+    });
+    if (!link) return { success: false, link: null };
+    return {
+      success: true,
+      link: {
+        ...link,
+        createdAt: link.createdAt ? link.createdAt.toISOString() : null,
+      },
+    };
+  } catch (error) {
+    console.error('Failed to fetch owner link:', error);
+    return { success: false, link: null };
+  }
+}
+
+// Update an existing link. Re-checks ownership inside the WHERE clause
+// so a creator can never patch a link that isn't theirs even if they
+// guess another link's UUID.
+export async function updatePicoLink(data: {
+  linkId: string;
+  creatorId: string;
+  title?: string;
+  description?: string;
+  price?: string;
+  contentUrl?: string;
+  type?: string;
+}) {
+  try {
+    const updateValues: Record<string, unknown> = {};
+    if (data.title !== undefined) updateValues.title = data.title;
+    if (data.description !== undefined) updateValues.description = data.description;
+    if (data.price !== undefined) updateValues.price = data.price;
+    if (data.contentUrl !== undefined) updateValues.contentUrl = data.contentUrl || null;
+    if (data.type !== undefined) updateValues.type = data.type;
+
+    if (Object.keys(updateValues).length === 0) {
+      return { success: false, error: 'No fields to update.' };
+    }
+
+    const result = await db
+      .update(picoLinks)
+      .set(updateValues)
+      .where(sql`${picoLinks.id} = ${data.linkId} AND ${picoLinks.creatorId} = ${data.creatorId}`)
+      .returning({ id: picoLinks.id });
+
+    if (!result.length) {
+      return { success: false, error: 'Link not found or you do not own it.' };
+    }
+
+    revalidatePath('/dashboard');
+    revalidatePath(`/p/${data.linkId}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to update pico link:', error);
+    return { success: false, error: 'Failed to update link.' };
   }
 }
 
