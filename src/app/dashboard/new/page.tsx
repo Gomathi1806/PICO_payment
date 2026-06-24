@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { createPicoLink } from '@/app/actions/pico';
+import { detectContent, detectedKindToType } from '@/lib/contentType';
 
 const CONTENT_TYPES = ['PDF', 'Article', 'Video', 'Audio', 'Image', 'Course', 'Other'];
 
@@ -19,6 +20,9 @@ export default function CreateNewLink() {
   const [description, setDescription] = useState('');
   const [contentUrl, setContentUrl] = useState('');
   const [type, setType] = useState('PDF');
+  // Track whether the type was set by auto-detection vs. the creator
+  // picking it manually. We only auto-update if they haven't overridden.
+  const [typeAutoSet, setTypeAutoSet] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const userId = session?.user?.id;
@@ -27,6 +31,15 @@ export default function CreateNewLink() {
   // Catch the most common creator mistake: pasting the gated URL into
   // the public description field. Show an inline warning if we spot one.
   const descriptionHasUrl = useMemo(() => URL_REGEX.test(description), [description]);
+
+  // Auto-pick the content type when the creator pastes a recognisable
+  // URL (YouTube → Video, .pdf → PDF, etc.). Skipped once they manually
+  // change the type, so we never override an explicit choice.
+  React.useEffect(() => {
+    if (!typeAutoSet || !contentUrl) return;
+    const detected = detectedKindToType(detectContent(contentUrl).kind);
+    if (detected && detected !== type) setType(detected);
+  }, [contentUrl, typeAutoSet, type]);
 
   const handleSubmit = async () => {
     if (!userId) {
@@ -116,7 +129,7 @@ export default function CreateNewLink() {
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setType(t)}
+                  onClick={() => { setType(t); setTypeAutoSet(false); }}
                   style={{
                     padding: '0.45rem 0.85rem',
                     fontSize: '0.75rem',

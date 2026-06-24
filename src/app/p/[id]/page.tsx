@@ -8,6 +8,7 @@ import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
 import { FundCard } from '@coinbase/onchainkit/fund';
+import UnlockedContent from '@/components/UnlockedContent';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
@@ -334,21 +335,18 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
                 You have unlocked this content.
               </p>
-              <div style={{
-                background: 'rgba(16, 185, 129, 0.1)', padding: '1rem',
-                borderRadius: '12px', fontWeight: 'bold', wordBreak: 'break-all'
-              }}>
-                {unlockedUrl ? (
-                  <a href={unlockedUrl} target="_blank" rel="noopener noreferrer"
-                     style={{ color: 'var(--success)', textDecoration: 'underline' }}>
-                    {unlockedUrl}
-                  </a>
-                ) : (
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
-                    Fetching your content…
-                  </span>
-                )}
-              </div>
+              {unlockedUrl ? (
+                <UnlockedContent url={unlockedUrl} linkId={link.id} linkTitle={link.title} />
+              ) : (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid var(--card-border)',
+                  borderRadius: '12px', padding: '1rem',
+                  color: 'var(--text-muted)', fontSize: '0.85rem',
+                }}>
+                  Fetching your content…
+                </div>
+              )}
             </div>
           ) : (
             <div>

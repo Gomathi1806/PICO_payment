@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { getPicoLinkForOwner, updatePicoLink } from '@/app/actions/pico';
+import { detectContent, detectedKindToType } from '@/lib/contentType';
 
 const CONTENT_TYPES = ['PDF', 'Article', 'Video', 'Audio', 'Image', 'Course', 'Other'];
 const URL_REGEX = /(https?:\/\/\S+|www\.\S+)/i;
@@ -23,9 +24,20 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
   const [contentUrl, setContentUrl] = useState('');
   const [type, setType] = useState('PDF');
   const [isSaving, setIsSaving] = useState(false);
+  // Tracks whether subsequent URL auto-detection should override the
+  // type. Starts false because the loaded link already has a chosen
+  // type we don't want to clobber; flips to true once the creator
+  // clears or changes the URL field.
+  const [typeAutoSet, setTypeAutoSet] = useState(false);
 
   const userId = session?.user?.id;
   const descriptionHasUrl = useMemo(() => URL_REGEX.test(description), [description]);
+
+  useEffect(() => {
+    if (!typeAutoSet || !contentUrl) return;
+    const detected = detectedKindToType(detectContent(contentUrl).kind);
+    if (detected && detected !== type) setType(detected);
+  }, [contentUrl, typeAutoSet, type]);
 
   useEffect(() => {
     if (!userId) return;
@@ -112,7 +124,7 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
               <button
                 key={t}
                 type="button"
-                onClick={() => setType(t)}
+                onClick={() => { setType(t); setTypeAutoSet(false); }}
                 style={{
                   padding: '0.45rem 0.85rem',
                   fontSize: '0.75rem',
@@ -173,7 +185,7 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
             type="url"
             placeholder="https://drive.google.com/..."
             value={contentUrl}
-            onChange={(e) => setContentUrl(e.target.value)}
+            onChange={(e) => { setContentUrl(e.target.value); setTypeAutoSet(true); }}
             style={inputStyle}
           />
           <Hint>🔒 Returned to fans only after their payment is confirmed on-chain.</Hint>
