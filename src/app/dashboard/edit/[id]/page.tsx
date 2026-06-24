@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { getPicoLinkForOwner, updatePicoLink } from '@/app/actions/pico';
 import { detectContent, detectedKindToType } from '@/lib/contentType';
+import FileUploader from '@/components/FileUploader';
 
 const CONTENT_TYPES = ['PDF', 'Article', 'Video', 'Audio', 'Image', 'Course', 'Other'];
 const URL_REGEX = /(https?:\/\/\S+|www\.\S+)/i;
@@ -29,6 +30,7 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
   // type we don't want to clobber; flips to true once the creator
   // clears or changes the URL field.
   const [typeAutoSet, setTypeAutoSet] = useState(false);
+  const [contentMode, setContentMode] = useState<'upload' | 'url'>('url');
 
   const userId = session?.user?.id;
   const descriptionHasUrl = useMemo(() => URL_REGEX.test(description), [description]);
@@ -180,14 +182,30 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
           )}
         </Field>
 
-        <Field label="CONTENT URL (PRIVATE — UNLOCKED AFTER PAYMENT)">
-          <input
-            type="url"
-            placeholder="https://drive.google.com/..."
-            value={contentUrl}
-            onChange={(e) => { setContentUrl(e.target.value); setTypeAutoSet(true); }}
-            style={inputStyle}
-          />
+        <Field label="GATED CONTENT (UNLOCKED AFTER PAYMENT)">
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
+            <ModeTab active={contentMode === 'upload'} onClick={() => setContentMode('upload')}>
+              📎 Upload file
+            </ModeTab>
+            <ModeTab active={contentMode === 'url'} onClick={() => setContentMode('url')}>
+              🔗 Paste URL
+            </ModeTab>
+          </div>
+
+          {contentMode === 'upload' ? (
+            <FileUploader
+              currentUrl={contentUrl}
+              onUploaded={(url) => { setContentUrl(url); setTypeAutoSet(true); }}
+            />
+          ) : (
+            <input
+              type="url"
+              placeholder="https://drive.google.com/..."
+              value={contentUrl}
+              onChange={(e) => { setContentUrl(e.target.value); setTypeAutoSet(true); }}
+              style={inputStyle}
+            />
+          )}
           <Hint>🔒 Returned to fans only after their payment is confirmed on-chain.</Hint>
         </Field>
 
@@ -233,6 +251,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </label>
       {children}
     </div>
+  );
+}
+
+function ModeTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flex: 1,
+        padding: '0.6rem 0.8rem',
+        fontSize: '0.8rem',
+        borderRadius: '8px',
+        border: '1px solid ' + (active ? 'rgba(59,130,246,0.5)' : 'var(--card-border)'),
+        background: active ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
+        cursor: 'pointer',
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

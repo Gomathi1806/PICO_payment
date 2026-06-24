@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { createPicoLink } from '@/app/actions/pico';
 import { detectContent, detectedKindToType } from '@/lib/contentType';
+import FileUploader from '@/components/FileUploader';
 
 const CONTENT_TYPES = ['PDF', 'Article', 'Video', 'Audio', 'Image', 'Course', 'Other'];
 
@@ -23,6 +24,7 @@ export default function CreateNewLink() {
   // Track whether the type was set by auto-detection vs. the creator
   // picking it manually. We only auto-update if they haven't overridden.
   const [typeAutoSet, setTypeAutoSet] = useState(true);
+  const [contentMode, setContentMode] = useState<'upload' | 'url'>('upload');
   const [isSaving, setIsSaving] = useState(false);
 
   const userId = session?.user?.id;
@@ -191,19 +193,37 @@ export default function CreateNewLink() {
             )}
           </Field>
 
-          {/* Gated content URL */}
-          <Field label="CONTENT URL (PRIVATE — UNLOCKED AFTER PAYMENT)">
-            <input
-              type="url"
-              placeholder="https://drive.google.com/... or https://yourstore.com/file.pdf"
-              value={contentUrl}
-              onChange={(e) => setContentUrl(e.target.value)}
-              style={inputStyle}
-            />
+          {/* Gated content — tabbed Upload vs Paste URL */}
+          <Field label="GATED CONTENT (UNLOCKED AFTER PAYMENT)">
+            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
+              <ModeTab active={contentMode === 'upload'} onClick={() => setContentMode('upload')}>
+                📎 Upload file
+              </ModeTab>
+              <ModeTab active={contentMode === 'url'} onClick={() => setContentMode('url')}>
+                🔗 Paste URL
+              </ModeTab>
+            </div>
+
+            {contentMode === 'upload' ? (
+              <FileUploader
+                currentUrl={contentUrl}
+                onUploaded={(url) => setContentUrl(url)}
+              />
+            ) : (
+              <input
+                type="url"
+                placeholder="https://drive.google.com/... or https://yourstore.com/file.pdf"
+                value={contentUrl}
+                onChange={(e) => setContentUrl(e.target.value)}
+                style={inputStyle}
+              />
+            )}
+
             <Hint>
-              🔒 This is the link fans receive <b>only after they pay</b>. Host your file on
-              Google Drive, Dropbox, Notion, your own site — anywhere with a shareable URL.
-              We never reveal this to non-paying visitors.
+              🔒 {contentMode === 'upload'
+                ? 'Files are hosted on Vercel Blob storage and only the URL is shared with paying fans.'
+                : 'Host your file on Google Drive, Dropbox, Notion, your own site — anywhere with a shareable URL.'}
+              {' '}We never reveal this to non-paying visitors.
             </Hint>
           </Field>
 
@@ -260,6 +280,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </label>
       {children}
     </div>
+  );
+}
+
+function ModeTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flex: 1,
+        padding: '0.6rem 0.8rem',
+        fontSize: '0.8rem',
+        borderRadius: '8px',
+        border: '1px solid ' + (active ? 'rgba(59,130,246,0.5)' : 'var(--card-border)'),
+        background: active ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
+        cursor: 'pointer',
+        fontWeight: active ? 600 : 400,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
