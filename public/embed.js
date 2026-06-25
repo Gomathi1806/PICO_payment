@@ -60,6 +60,7 @@
   function injectStyles() {
     if (document.getElementById('pico-paywall-styles')) return;
     var css = ''
+      // ── default variant (creator-economy / startup vibe) ──────────
       + '.pico-paywall{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;'
       +   'border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:24px;margin:24px 0;'
       +   'background:linear-gradient(180deg,#fafafa 0%,#f3f4f6 100%);text-align:center;}'
@@ -75,7 +76,34 @@
       + '.pico-paywall__powered{font-size:11px;color:#9ca3af;margin-top:14px;letter-spacing:.02em}'
       + '.pico-paywall__powered a{color:inherit;text-decoration:underline}'
       + '.pico-paywall__protocol{font-size:10px;color:#9ca3af;margin-top:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}'
-      + '.pico-paywall__error{color:#dc2626;font-size:12px;margin-top:10px}';
+      + '.pico-paywall__error{color:#dc2626;font-size:12px;margin-top:10px}'
+      // ── editorial variant (newspapers / journalism) ───────────────
+      // Calmer palette, serif headlines, no emoji, no gradient — meant
+      // to sit naturally inside a newspaper article without screaming
+      // "third-party widget". Activated via data-variant="editorial".
+      + '.pico-paywall[data-variant="editorial"]{font-family:Georgia,"Times New Roman",serif;'
+      +   'background:#fff;border:1px solid #d1d5db;border-top:3px solid #111827;border-radius:0;'
+      +   'padding:28px 32px;text-align:left;max-width:560px;margin:32px auto;}'
+      + '@media (prefers-color-scheme:dark){.pico-paywall[data-variant="editorial"]{'
+      +   'background:#0b0b0d;border-color:#2a2a32;border-top-color:#e7e7ea;color:#e7e7ea}}'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__lock{display:none}'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__eyebrow{'
+      +   'font-family:-apple-system,sans-serif;font-size:11px;letter-spacing:.12em;text-transform:uppercase;'
+      +   'color:#6b7280;margin:0 0 12px;font-weight:600}'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__title{'
+      +   'font-family:Georgia,serif;font-size:22px;font-weight:700;line-height:1.25;margin:0 0 10px}'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__sub{'
+      +   'font-family:Georgia,serif;font-size:15px;line-height:1.5;color:#4b5563;margin:0 0 22px}'
+      + '@media (prefers-color-scheme:dark){.pico-paywall[data-variant="editorial"] .pico-paywall__sub{color:#9ca3af}}'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__btn{'
+      +   'font-family:-apple-system,sans-serif;background:#111827;color:#fff;font-weight:600;font-size:14px;'
+      +   'padding:13px 28px;border-radius:2px}'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__btn:hover{background:#1f2937}'
+      + '@media (prefers-color-scheme:dark){.pico-paywall[data-variant="editorial"] .pico-paywall__btn{'
+      +   'background:#e7e7ea;color:#0b0b0d}}'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__powered,'
+      + '.pico-paywall[data-variant="editorial"] .pico-paywall__protocol{'
+      +   'font-family:-apple-system,sans-serif;text-align:left;margin-top:18px}';
     var style = document.createElement('style');
     style.id = 'pico-paywall-styles';
     style.appendChild(document.createTextNode(css));
@@ -116,6 +144,8 @@
     var title = host.dataset.title || 'this article';
     var previewSelector = host.dataset.previewSelector || '';
     var previewWords = parseInt(host.dataset.previewWords || '80', 10);
+    var variant = (host.dataset.variant || 'default').toLowerCase();
+    var publication = host.dataset.publication || '';
     var previewEl = previewSelector ? document.querySelector(previewSelector) : null;
 
     // Cached unlock from a previous visit on this device → reveal immediately.
@@ -130,16 +160,29 @@
     // the whole article.
     if (previewEl) applyPreview(previewEl, previewWords);
 
+    if (variant === 'editorial') host.setAttribute('data-variant', 'editorial');
+
     // Render the paywall card optimistically — we'll hide it if the
     // fast-path unlock succeeds in the next tick.
+    var titleCopy = variant === 'editorial'
+      ? 'Continue reading'
+      : 'Continue reading ' + escapeHtml(title);
+    var subCopy = variant === 'editorial'
+      ? (price
+          ? 'This article costs £' + escapeHtml(price) + ' to unlock. Pay once — no subscription, no sign-up. Continue reading in under five seconds.'
+          : 'This article is reader-supported. Pay once to continue reading.')
+      : ((price ? 'Unlock for £' + escapeHtml(price) + ' · ' : '') + 'Pay with Apple Pay or card · no signup');
+    var btnCopy = variant === 'editorial'
+      ? (price ? 'Continue reading — £' + escapeHtml(price) : 'Continue reading')
+      : (price ? '🔓 Unlock for £' + escapeHtml(price) : '🔓 Unlock article');
+
     host.innerHTML = ''
-      + '<div class="pico-paywall__lock">🔒</div>'
-      + '<p class="pico-paywall__title">Continue reading ' + escapeHtml(title) + '</p>'
-      + '<p class="pico-paywall__sub">' + (price ? 'Unlock for £' + escapeHtml(price) + ' · ' : '')
-      +   'Pay with Apple Pay or card · no signup</p>'
-      + '<button class="pico-paywall__btn" type="button">'
-      +   (price ? '🔓 Unlock for £' + escapeHtml(price) : '🔓 Unlock article')
-      + '</button>'
+      + (variant === 'editorial' && publication
+          ? '<p class="pico-paywall__eyebrow">' + escapeHtml(publication) + '</p>'
+          : '<div class="pico-paywall__lock">🔒</div>')
+      + '<p class="pico-paywall__title">' + titleCopy + '</p>'
+      + '<p class="pico-paywall__sub">' + subCopy + '</p>'
+      + '<button class="pico-paywall__btn" type="button">' + btnCopy + '</button>'
       + '<div class="pico-paywall__error" hidden></div>'
       + '<p class="pico-paywall__powered">Powered by <a href="' + ORIGIN + '/publishers" target="_blank" rel="noopener">Pico</a> · Secure micropayments</p>'
       + '<p class="pico-paywall__protocol">Settled via x402 protocol on Base</p>';

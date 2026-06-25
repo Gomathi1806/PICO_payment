@@ -37,13 +37,17 @@ export default function PublishersPage() {
           color: 'var(--accent)', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)',
           padding: '0.3rem 0.7rem', borderRadius: '100px', marginBottom: '1.5rem',
         }}>
-          FOR PUBLISHERS · NEWSLETTERS · JOURNALISTS
+          BUILT ON x402 · THE INTERNET&apos;S PAYMENT STANDARD
         </div>
         <h1 className="text-gradient" style={{ fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1rem' }}>
           Charge per article. Keep 95%.
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1rem', maxWidth: '560px', margin: '0 auto 2rem', lineHeight: 1.5 }}>
-          The micropayment paywall for newsletters and journalism — sell single articles from <b style={{ color: 'white' }}>£0.20–£5</b> via Apple Pay or card. Your free-tier readers never see a subscription wall again.
+        <p style={{ color: 'var(--text-muted)', fontSize: '1rem', maxWidth: '580px', margin: '0 auto 1rem', lineHeight: 1.5 }}>
+          The micropayment paywall for newsletters and journalism — sell single articles from <b style={{ color: 'white' }}>£0.20–£5</b> via Apple Pay or card. Built on <b style={{ color: 'white' }}>x402</b>, the open HTTP payment protocol from Coinbase, so your paywall works for humans <i>and</i> AI agents.
+        </p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '500px', margin: '0 auto 2rem', lineHeight: 1.4 }}>
+          Targeting <b style={{ color: 'white' }}>newspapers and journalism</b>? See the{' '}
+          <Link href="/publishers/print" style={{ color: 'var(--accent)' }}>editorial paywall →</Link>
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <a href="mailto:hello@pico.link?subject=Pico%20for%20Publishers%20%E2%80%94%20founding%20partner"
@@ -55,6 +59,23 @@ export default function PublishersPage() {
           </a>
         </div>
       </header>
+
+      {/* x402 differentiator */}
+      <section className="glass" style={{
+        padding: '1.5rem 1.75rem', marginBottom: '2rem',
+        background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.02) 100%)',
+        border: '1px solid rgba(99,102,241,0.25)',
+      }}>
+        <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', color: '#a5b4fc', marginBottom: '0.5rem' }}>
+          🤖 AGENT-READY PAYWALL
+        </div>
+        <h3 style={{ fontSize: '1.05rem', marginBottom: '0.6rem' }}>
+          The first paywall AI agents can actually pay
+        </h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', lineHeight: 1.55, margin: 0 }}>
+          Stripe, Patreon, and Substack paywalls require a human to fill in a form. Pico speaks <b style={{ color: 'white' }}>HTTP 402 Payment Required</b> — the open standard backed by Coinbase, Cloudflare, AWS, and Stripe. That means <b style={{ color: 'white' }}>AI research agents, RSS readers, and machine-to-machine clients</b> can pay for your content automatically. As agentic browsing becomes the default, x402 paywalls earn revenue that subscription walls turn away.
+        </p>
+      </section>
 
       {/* The deal */}
       <section className="glass" style={{
@@ -200,7 +221,7 @@ export default function PublishersPage() {
       </section>
 
       <footer style={{ textAlign: 'center', marginTop: '3rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-        <p>© 2026 Pico Payments. Built on Coinbase Smart Wallet &amp; Base L2.</p>
+        <p>© 2026 Pico Payments. Built on the <a href="https://www.x402.org" target="_blank" rel="noopener" style={{ color: 'var(--accent)' }}>x402 protocol</a>, Coinbase Smart Wallet &amp; Base L2.</p>
         <p style={{ marginTop: '0.5rem' }}>
           Cryptoasset purchases facilitated by Transak Pty Ltd (FCA #928910). Cryptoassets are high-risk, unregulated investments — you may lose all the money you invest.
         </p>
