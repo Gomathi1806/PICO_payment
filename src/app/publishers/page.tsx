@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import FeeCalculator from '@/components/FeeCalculator';
 
 export const metadata = {
   title: 'Pico for Publishers — Per-article micropayments for newsletters and journalism',
@@ -155,6 +156,12 @@ export default function PublishersPage() {
           <StepCard num="3" title="Reader unlocks" body="Apple Pay → instant unlock. They never see the paywall again." />
           <StepCard num="4" title="You get paid" body="USDC hits your wallet in 30 seconds. Withdraw to bank when ready." />
         </div>
+      </section>
+
+      {/* Interactive fee calculator */}
+      <section style={{ marginBottom: '3rem' }}>
+        <h2 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>Run your own numbers</h2>
+        <FeeCalculator />
       </section>
 
       {/* What you get */}

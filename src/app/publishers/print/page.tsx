@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import FeeCalculator from '@/components/FeeCalculator';
 
 export const metadata = {
   title: 'Pico for Newsrooms — Per-article payments for journalism',
@@ -347,6 +348,23 @@ export default function PrintPublishersPage() {
           <p style={{ fontSize: '0.75rem', color: editorialMuted, marginTop: '0.75rem', lineHeight: 1.5 }}>
             Per-article micropayments convert 20× more readers because there is no commitment. They keep paying because each individual decision is trivial. The model has been a holy grail for newspapers since 1996. x402 is what finally makes it economically viable.
           </p>
+        </div>
+      </section>
+
+      {/* Interactive calculator — wrapped in dark editorial frame */}
+      <section style={{ marginBottom: '3rem' }}>
+        <Eyebrow>Run your own numbers</Eyebrow>
+        <h2 style={{ fontFamily: 'Georgia, serif', fontSize: '1.75rem', fontWeight: 700, margin: '0 0 1rem', color: editorialInk }}>
+          What 20p × your readership pays you per month.
+        </h2>
+        <div style={{
+          background: editorialInk,
+          padding: '1.25rem',
+          borderRadius: '2px',
+          // Force the calculator's dark theme to read against the cream page
+          color: editorialBg,
+        }}>
+          <FeeCalculator />
         </div>
       </section>
 
