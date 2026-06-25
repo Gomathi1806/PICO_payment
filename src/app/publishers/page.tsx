@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import FeeCalculator from '@/components/FeeCalculator';
+import RevenueCalculator from '@/components/RevenueCalculator';
 
 export const metadata = {
   title: 'Pico for Publishers — Per-article micropayments for newsletters and journalism',
@@ -158,9 +159,15 @@ export default function PublishersPage() {
         </div>
       </section>
 
-      {/* Interactive fee calculator */}
+      {/* Revenue opportunity calculator — the bigger of the two */}
       <section style={{ marginBottom: '3rem' }}>
-        <h2 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>Run your own numbers</h2>
+        <h2 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>How much revenue is your free tier worth?</h2>
+        <RevenueCalculator />
+      </section>
+
+      {/* Per-transaction fee calculator */}
+      <section style={{ marginBottom: '3rem' }}>
+        <h2 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>How much do you keep per unlock?</h2>
         <FeeCalculator />
       </section>
 

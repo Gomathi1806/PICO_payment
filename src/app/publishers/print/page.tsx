@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import FeeCalculator from '@/components/FeeCalculator';
+import RevenueCalculator from '@/components/RevenueCalculator';
 
 export const metadata = {
   title: 'Pico for Newsrooms — Per-article payments for journalism',
@@ -351,19 +352,27 @@ export default function PrintPublishersPage() {
         </div>
       </section>
 
-      {/* Interactive calculator — wrapped in dark editorial frame */}
+      {/* Revenue opportunity — the main calculator for newsroom audience */}
       <section style={{ marginBottom: '3rem' }}>
-        <Eyebrow>Run your own numbers</Eyebrow>
+        <Eyebrow>The opportunity</Eyebrow>
+        <h2 style={{ fontFamily: 'Georgia, serif', fontSize: '1.75rem', fontWeight: 700, margin: '0 0 1rem', color: editorialInk }}>
+          What your 99% of non-subscribers are worth.
+        </h2>
+        <p style={{ fontSize: '1rem', lineHeight: 1.55, color: editorialMuted, marginBottom: '1.25rem', maxWidth: '640px' }}>
+          Plug in your monthly traffic. The calculator estimates how many articles each visitor reads, then compares your current subscription revenue with what Pico would capture at three pay-per-article conversion scenarios.
+        </p>
+        <div style={{ background: editorialInk, padding: '1.25rem', borderRadius: '2px', color: editorialBg }}>
+          <RevenueCalculator />
+        </div>
+      </section>
+
+      {/* Per-unlock fee calculator — supporting detail */}
+      <section style={{ marginBottom: '3rem' }}>
+        <Eyebrow>Per-unlock economics</Eyebrow>
         <h2 style={{ fontFamily: 'Georgia, serif', fontSize: '1.75rem', fontWeight: 700, margin: '0 0 1rem', color: editorialInk }}>
           What 20p × your readership pays you per month.
         </h2>
-        <div style={{
-          background: editorialInk,
-          padding: '1.25rem',
-          borderRadius: '2px',
-          // Force the calculator's dark theme to read against the cream page
-          color: editorialBg,
-        }}>
+        <div style={{ background: editorialInk, padding: '1.25rem', borderRadius: '2px', color: editorialBg }}>
           <FeeCalculator />
         </div>
       </section>
