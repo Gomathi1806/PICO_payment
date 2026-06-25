@@ -284,7 +284,15 @@ export default function CreatorDashboard() {
                         </span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      <Link
+                        href={`/dashboard/embed/${item.id}`}
+                        className="btn btn-secondary"
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', textDecoration: 'none' }}
+                        title="Get embed code for publisher integration"
+                      >
+                        📦 Embed
+                      </Link>
                       <Link
                         href={`/dashboard/edit/${item.id}`}
                         className="btn btn-secondary"
