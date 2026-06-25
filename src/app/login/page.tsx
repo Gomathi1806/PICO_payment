@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import LegalFooter from '@/components/LegalFooter';
-import { signIn } from 'next-auth/react';
+import { signIn, getSession } from 'next-auth/react';
+import { getHomeRouteForUser } from '@/app/actions/auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,7 +28,10 @@ export default function LoginPage() {
       if (result?.error) {
         setError('Invalid email or password.');
       } else {
-        router.push('/dashboard');
+        const session = await getSession();
+        const userId = session?.user?.id;
+        const home = userId ? await getHomeRouteForUser(userId) : '/dashboard';
+        router.push(home);
       }
     } catch {
       setError('Something went wrong. Please try again.');
