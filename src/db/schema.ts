@@ -55,3 +55,22 @@ export const payments = pgTable('payments', {
 
 export type Payment = typeof payments.$inferSelect;
 export type NewPayment = typeof payments.$inferInsert;
+
+// ─── Widget Views ───────────────────────────────────────────
+// An impression of the paywall — someone loaded an article that
+// embeds a Pico widget and got a 402 back. Combined with `payments`
+// this gives publishers a real conversion funnel and lets the admin
+// dashboard surface dormant (no views in 7+ days) or hot widgets.
+// Referrer is logged so publishers can see which articles drive
+// paywall impressions; user-agent is bucketed (browser vs agent vs
+// bot) for the developer-platform analytics.
+export const widgetViews = pgTable('widget_views', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  linkId: uuid('link_id').notNull(),
+  referrer: text('referrer'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export type WidgetView = typeof widgetViews.$inferSelect;
+export type NewWidgetView = typeof widgetViews.$inferInsert;

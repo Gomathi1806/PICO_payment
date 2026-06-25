@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { isAdmin } from '@/lib/roles';
 import { getPlatformStats, getPlatformRecentPayments } from '@/app/actions/admin';
+import { getAllWidgetStatsForAdmin } from '@/app/actions/widgets';
 import LegalFooter from '@/components/LegalFooter';
 
 /**
@@ -24,15 +25,31 @@ export default async function AdminDashboard() {
     redirect('/login?reason=admin-required');
   }
 
-  const [statsRes, recentRes] = await Promise.all([
+  const [statsRes, recentRes, widgetsRes] = await Promise.all([
     getPlatformStats(),
     getPlatformRecentPayments(25),
+    getAllWidgetStatsForAdmin(),
   ]);
 
   const stats = statsRes.success ? statsRes.stats : null;
   const recent = recentRes.success ? recentRes.payments : [];
+  const allWidgets = widgetsRes.success ? widgetsRes.widgets : [];
   const gross = Number(stats?.grossVolume ?? '0.00');
   const piclFee = gross * 0.05;
+
+  // Widget health buckets — admin cares about deployment problems at
+  // platform scale: dormant widgets often mean a publisher's CMS
+  // stripped the script tag or someone deleted the article.
+  const activeWidgets = allWidgets.filter((w) => w.status === 'active');
+  const dormantWidgets = allWidgets.filter((w) => w.status === 'dormant');
+  const idleWidgets = allWidgets.filter((w) => w.status === 'idle');
+  const topByRevenue = [...allWidgets]
+    .sort((a, b) => Number(b.grossRevenue) - Number(a.grossRevenue))
+    .slice(0, 5);
+  const topByConversion = [...allWidgets]
+    .filter((w) => w.views >= 5) // ignore noise from low-view widgets
+    .sort((a, b) => b.conversionRate - a.conversionRate)
+    .slice(0, 5);
 
   return (
     <div className="animate-fade">
@@ -73,6 +90,81 @@ export default async function AdminDashboard() {
         <Stat label="Paywalled links" value={(stats?.totalLinks ?? 0).toString()} sub={`${stats?.totalPayments ?? 0} unlocks`} />
         <Stat label="Gross volume" value={`$${gross.toFixed(2)}`} sub="all-time USDC paid" tone="ok" />
         <Stat label="Pico treasury (est)" value={`$${piclFee.toFixed(2)}`} sub="@ 5% effective fee" tone="warn" />
+      </section>
+
+      {/* Widget health — cross-tenant deployment monitoring */}
+      <section className="glass" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Widget health — across all publishers</h2>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            {allWidgets.length} total widgets
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+          <MiniStat label="Active" value={activeWidgets.length.toString()} sub="view in last 7 days" tone="ok" />
+          <MiniStat label="Dormant" value={dormantWidgets.length.toString()} sub="no recent views" tone={dormantWidgets.length > 0 ? 'warn' : undefined} />
+          <MiniStat label="Idle" value={idleWidgets.length.toString()} sub="never viewed" />
+          <MiniStat
+            label="Total impressions"
+            value={allWidgets.reduce((s, w) => s + w.views, 0).toLocaleString('en-GB')}
+            sub={`${allWidgets.reduce((s, w) => s + w.conversions, 0).toLocaleString('en-GB')} unlocks`}
+          />
+        </div>
+
+        {/* Top performers */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+          <LeaderboardCard
+            title="🏆 Top widgets by revenue"
+            rows={topByRevenue.map((w) => ({
+              left: `@${w.creatorHandle || '?'} — ${w.title}`,
+              right: `$${Number(w.grossRevenue).toFixed(2)}`,
+            }))}
+            emptyHint="No payments yet."
+          />
+          <LeaderboardCard
+            title="📈 Top widgets by conversion"
+            rows={topByConversion.map((w) => ({
+              left: `@${w.creatorHandle || '?'} — ${w.title}`,
+              right: `${(w.conversionRate * 100).toFixed(1)}% (${w.views} views)`,
+            }))}
+            emptyHint="No widgets with 5+ views yet."
+          />
+        </div>
+
+        {/* Dormant detail — most actionable signal */}
+        {dormantWidgets.length > 0 && (
+          <details style={{ marginTop: '1.25rem' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', listStyle: 'none' }}>
+              ⚠️ {dormantWidgets.length} dormant widget{dormantWidgets.length === 1 ? '' : 's'} — likely deployment issues
+            </summary>
+            <div style={{ marginTop: '0.85rem', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                <thead>
+                  <tr style={{ color: 'var(--text-muted)', fontSize: '0.65rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                    <th style={{ textAlign: 'left', padding: '0.4rem' }}>Publisher</th>
+                    <th style={{ textAlign: 'left', padding: '0.4rem' }}>Widget</th>
+                    <th style={{ textAlign: 'right', padding: '0.4rem' }}>Views</th>
+                    <th style={{ textAlign: 'right', padding: '0.4rem' }}>Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dormantWidgets.map((w) => (
+                    <tr key={w.linkId} style={{ borderTop: '1px solid var(--card-border)' }}>
+                      <td style={{ padding: '0.55rem 0.4rem' }}>@{w.creatorHandle || '?'}</td>
+                      <td style={{ padding: '0.55rem 0.4rem', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {w.title}
+                      </td>
+                      <td style={{ padding: '0.55rem 0.4rem', textAlign: 'right' }}>{w.views}</td>
+                      <td style={{ padding: '0.55rem 0.4rem', textAlign: 'right', color: 'var(--text-muted)' }}>
+                        {w.lastViewAt ? new Date(w.lastViewAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
       </section>
 
       {/* Recent payments — the platform-wide activity feed */}
@@ -149,6 +241,47 @@ export default async function AdminDashboard() {
       </section>
 
       <LegalFooter variant="compact" />
+    </div>
+  );
+}
+
+function MiniStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'ok' | 'warn' }) {
+  const color = tone === 'ok' ? 'var(--success)' : tone === 'warn' ? '#fbbf24' : 'white';
+  return (
+    <div style={{
+      padding: '0.8rem 1rem',
+      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid var(--card-border)',
+      borderRadius: '10px',
+    }}>
+      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: '1.2rem', fontWeight: 700, marginTop: '0.2rem', color }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{sub}</div>}
+    </div>
+  );
+}
+
+function LeaderboardCard({ title, rows, emptyHint }: { title: string; rows: { left: string; right: string }[]; emptyHint: string }) {
+  return (
+    <div style={{
+      padding: '0.85rem 1rem',
+      background: 'rgba(255,255,255,0.02)',
+      border: '1px solid var(--card-border)',
+      borderRadius: '10px',
+    }}>
+      <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.5rem' }}>{title}</div>
+      {rows.length === 0 ? (
+        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>{emptyHint}</p>
+      ) : (
+        <ol style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.75rem', lineHeight: 1.6 }}>
+          {rows.map((r, i) => (
+            <li key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.left}</span>
+              <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{r.right}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

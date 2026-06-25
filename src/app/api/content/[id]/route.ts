@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
-import { picoLinks, users, payments } from '@/db/schema';
+import { picoLinks, users, payments, widgetViews } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { withDynamicX402 } from '@/lib/x402-config';
 
@@ -78,6 +78,26 @@ export const GET = withDynamicX402(handler, async (req) => {
   const id = segments[segments.length - 1];
   const loaded = await loadLink(id);
   if (!loaded) return null; // 404 path runs through the unguarded handler
+
+  // Log the impression after the response is sent. resolve() runs on
+  // every request — whether it ends in 402 or 200 — so this counts
+  // every time a reader sees the paywall and gives publishers a real
+  // conversion funnel (views vs payments) in the widget dashboard.
+  // after() is the Next.js 15+ primitive that defers the work until
+  // after the response is flushed, so the user never waits on the DB.
+  const referrer = req.headers.get('referer');
+  const userAgent = req.headers.get('user-agent');
+  after(async () => {
+    try {
+      await db.insert(widgetViews).values({
+        linkId: id,
+        referrer: referrer?.slice(0, 500) ?? null,
+        userAgent: userAgent?.slice(0, 500) ?? null,
+      });
+    } catch (e) {
+      console.warn('[pico/x402] widget_views insert failed:', e);
+    }
+  });
 
   return {
     price: `$${loaded.link.price}`,
