@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useConnect, useAccount } from 'wagmi';
 import { getPicoLinks, getCreatorEarnings, getPerLinkStats, getRecentActivity, getUSDCtoGBP } from '@/app/actions/pico';
 import RampOfframpButton from '@/components/RampOfframpButton';
+import LegalFooter from '@/components/LegalFooter';
 import { calculateFeeBps } from '@/lib/constants';
 import { getUserById, updateWalletAddress } from '@/app/actions/auth';
 import { PicoLink } from '@/db/schema';
@@ -357,21 +358,23 @@ export default function CreatorDashboard() {
         </div>
       )}
 
-      {/* Cash Out Footer */}
-      <footer style={{ marginTop: '3rem', paddingBottom: '3rem' }}>
+      {/* Cash Out CTA */}
+      <section style={{ marginTop: '3rem' }}>
         <div className="glass" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            Earnings are instantly settled on Base. Cash out to your bank via Coinbase anytime.
+            Earnings are instantly settled on Base. Cash out via Ramp, Coinbase Card, or manual transfer.
           </p>
           <button
             className="btn btn-secondary"
             style={{ width: '100%' }}
             onClick={() => setIsCashOutOpen(true)}
           >
-            Cash Out to Bank
+            Cash Out
           </button>
         </div>
-      </footer>
+      </section>
+
+      <LegalFooter variant="compact" />
 
       {/* Cash Out Modal — three paths from fastest to most manual */}
       {isCashOutOpen && (

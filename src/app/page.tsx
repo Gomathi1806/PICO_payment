@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import LegalFooter from '@/components/LegalFooter';
 
 export default function LandingPage() {
   return (
@@ -62,25 +63,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer style={{
-        marginTop: '6rem',
-        paddingTop: '2rem',
-        paddingBottom: '4rem',
-        borderTop: '1px solid var(--card-border)',
-        textAlign: 'center',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.85rem',
-        maxWidth: '640px',
-        marginInline: 'auto',
-      }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>
-          Built on <a href="https://www.x402.org" target="_blank" rel="noopener" style={{ color: 'var(--accent)' }}>x402</a> · Settled on Base L2 · Coinbase Smart Wallet
-        </p>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', margin: 0, lineHeight: 1.55 }}>
-          © 2026 Pico Payments Ltd · Pico is a non-custodial software platform. Cryptoasset purchases are facilitated by Transak Pty Ltd (FCA #928910) and Ramp Network Limited (FCA #920097). Cryptoassets are high-risk, unregulated investments — you may lose all the money you invest.
-        </p>
-      </footer>
+      <LegalFooter />
     </div>
   );
 }

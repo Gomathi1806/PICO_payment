@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import LegalFooter from '@/components/LegalFooter';
 import { signIn } from 'next-auth/react';
 
 export default function LoginPage() {
@@ -133,11 +134,7 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <footer style={{ marginTop: '3rem', textAlign: 'center' }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-          Built on Base &bull; Powered by X402
-        </p>
-      </footer>
+      <LegalFooter variant="compact" />
     </div>
   );
 }
