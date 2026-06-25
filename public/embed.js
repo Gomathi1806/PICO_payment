@@ -1,5 +1,5 @@
 /**
- * Pico Paywall Embed — v0.1
+ * Pico Paywall Embed — v0.2 (x402-backed)
  *
  * Drop into any article to gate the content behind a micropayment:
  *
@@ -12,17 +12,19 @@
  *   </div>
  *   <script src="https://pico.link/embed.js" async></script>
  *
- * After the reader pays via Pico, the paywall self-removes and the
- * full article is revealed. We remember the unlock in localStorage so
- * the reader never sees the paywall again for that link on this device.
+ * Payment is settled via the x402 protocol against Pico's facilitator
+ * endpoint. On every page load the embed first tries a plain GET against
+ * /api/content/[id]; if the reader already paid in a previous session
+ * (and the facilitator's cache still vouches for it) the content
+ * unlocks inline with no popup at all. First-time payers still see the
+ * Pico checkout popup because most fans don't have an x402-aware wallet
+ * bundled into the publisher's page yet — that comes in Phase 2 via an
+ * optional @pico/embed-react SDK.
  */
 (function () {
   'use strict';
 
   // ── config ────────────────────────────────────────────────────────────
-  // Resolved at load time from the <script> tag's src attribute, so the
-  // embed always opens checkout on the same origin that served it. Avoids
-  // hard-coding a domain that might change between staging and production.
   var SCRIPT = document.currentScript || (function () {
     var s = document.getElementsByTagName('script');
     return s[s.length - 1];
@@ -37,15 +39,22 @@
   function hasUnlocked(linkId) {
     try { return localStorage.getItem(STORAGE_PREFIX + linkId) === '1'; } catch (_) { return false; }
   }
-
   function markUnlocked(linkId) {
     try { localStorage.setItem(STORAGE_PREFIX + linkId, '1'); } catch (_) { /* private mode */ }
   }
-
   function truncateWords(text, n) {
     var words = text.trim().split(/\s+/);
     if (words.length <= n) return text;
     return words.slice(0, n).join(' ') + '…';
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function cssEscape(s) {
+    if (window.CSS && CSS.escape) return CSS.escape(s);
+    return String(s).replace(/["\\]/g, '\\$&');
   }
 
   function injectStyles() {
@@ -65,6 +74,7 @@
       + '.pico-paywall__btn:disabled{opacity:.6;cursor:wait}'
       + '.pico-paywall__powered{font-size:11px;color:#9ca3af;margin-top:14px;letter-spacing:.02em}'
       + '.pico-paywall__powered a{color:inherit;text-decoration:underline}'
+      + '.pico-paywall__protocol{font-size:10px;color:#9ca3af;margin-top:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}'
       + '.pico-paywall__error{color:#dc2626;font-size:12px;margin-top:10px}';
     var style = document.createElement('style');
     style.id = 'pico-paywall-styles';
@@ -72,20 +82,29 @@
     document.head.appendChild(style);
   }
 
-  // Trims the protected element down to a short preview so the reader sees
-  // a teaser, not the whole article. Stores the original HTML on the
-  // element so we can put it back when payment succeeds.
   function applyPreview(el, words) {
     if (!el || el.dataset.picoOriginalHtml) return;
     el.dataset.picoOriginalHtml = el.innerHTML;
     var text = el.innerText || el.textContent || '';
     el.innerHTML = '<p>' + truncateWords(text, words) + '</p>';
   }
-
   function restoreContent(el) {
     if (!el || !el.dataset.picoOriginalHtml) return;
     el.innerHTML = el.dataset.picoOriginalHtml;
     delete el.dataset.picoOriginalHtml;
+  }
+
+  // ── x402 fast-path ────────────────────────────────────────────────────
+  // The Pico content endpoint speaks x402. A bare GET returns either 200
+  // (payment cached / facilitator vouches for this client) or 402 with
+  // payment requirements. The fetch can also pass cached payment proof
+  // via credentials so returning readers unlock without a popup.
+  function tryFastUnlock(linkId) {
+    var url = ORIGIN + '/api/content/' + encodeURIComponent(linkId);
+    return fetch(url, { credentials: 'include' }).then(function (res) {
+      if (res.status === 200) return res.json();
+      return null; // 402 or anything else falls through to popup flow
+    }).catch(function () { return null; });
   }
 
   // ── core ──────────────────────────────────────────────────────────────
@@ -99,15 +118,20 @@
     var previewWords = parseInt(host.dataset.previewWords || '80', 10);
     var previewEl = previewSelector ? document.querySelector(previewSelector) : null;
 
-    // Already paid on this device → reveal immediately, never render the card.
+    // Cached unlock from a previous visit on this device → reveal immediately.
     if (hasUnlocked(linkId)) {
       restoreContent(previewEl);
       host.style.display = 'none';
       return;
     }
 
+    // Truncate the protected content while we check the server. Even the
+    // brief flash between paint and the fast-path response shouldn't show
+    // the whole article.
     if (previewEl) applyPreview(previewEl, previewWords);
 
+    // Render the paywall card optimistically — we'll hide it if the
+    // fast-path unlock succeeds in the next tick.
     host.innerHTML = ''
       + '<div class="pico-paywall__lock">🔒</div>'
       + '<p class="pico-paywall__title">Continue reading ' + escapeHtml(title) + '</p>'
@@ -117,18 +141,30 @@
       +   (price ? '🔓 Unlock for £' + escapeHtml(price) : '🔓 Unlock article')
       + '</button>'
       + '<div class="pico-paywall__error" hidden></div>'
-      + '<p class="pico-paywall__powered">Powered by <a href="' + ORIGIN + '/publishers" target="_blank" rel="noopener">Pico</a> · Secure micropayments</p>';
+      + '<p class="pico-paywall__powered">Powered by <a href="' + ORIGIN + '/publishers" target="_blank" rel="noopener">Pico</a> · Secure micropayments</p>'
+      + '<p class="pico-paywall__protocol">Settled via x402 protocol on Base</p>';
 
     var btn = host.querySelector('button');
     var errEl = host.querySelector('.pico-paywall__error');
+
+    // Try the server fast-path. If the facilitator (or our session
+    // cookie) confirms this client already paid, unlock without a popup.
+    tryFastUnlock(linkId).then(function (data) {
+      if (!data) return;
+      markUnlocked(linkId);
+      restoreContent(previewEl);
+      host.style.display = 'none';
+    });
 
     btn.addEventListener('click', function () {
       btn.disabled = true;
       btn.textContent = 'Opening checkout…';
       if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
 
-      // Open Pico checkout in a centred popup. The checkout page calls
-      // window.opener.postMessage with the unlock event once payment lands.
+      // First-time payers still go through the Pico checkout popup
+      // because most fan browsers don't have an x402-aware wallet
+      // bundled into the publisher's page. The popup's payment is now
+      // validated by the x402 facilitator on the server side.
       var w = 460, h = 760;
       var left = (window.outerWidth - w) / 2 + (window.screenX || 0);
       var top = (window.outerHeight - h) / 2 + (window.screenY || 0);
@@ -139,14 +175,10 @@
       );
 
       if (!popup) {
-        // Popup blocker. Fall back to same-tab navigation so the reader
-        // still has a path to pay, even if they lose their place.
         window.location.href = ORIGIN + '/p/' + encodeURIComponent(linkId);
         return;
       }
 
-      // If the reader closes the popup without paying, re-enable the
-      // button so they can try again.
       var pollClosed = setInterval(function () {
         if (popup.closed) {
           clearInterval(pollClosed);
@@ -159,23 +191,13 @@
     });
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
-  // Single global postMessage handler — works no matter how many paywalls
-  // are on the page. Only trusts messages from the Pico origin.
+  // Global postMessage handler — only trusts messages from the Pico origin.
   window.addEventListener('message', function (event) {
     if (event.origin !== ORIGIN) return;
     var data = event.data || {};
     if (data.type !== 'pico:unlock' || !data.linkId) return;
 
     markUnlocked(data.linkId);
-
-    // Restore any preview elements tied to this link and hide all
-    // paywall hosts for the same linkId.
     document.querySelectorAll('.pico-paywall[data-link-id="' + cssEscape(data.linkId) + '"]')
       .forEach(function (host) {
         var selector = host.dataset.previewSelector;
@@ -183,11 +205,6 @@
         host.style.display = 'none';
       });
   });
-
-  function cssEscape(s) {
-    if (window.CSS && CSS.escape) return CSS.escape(s);
-    return String(s).replace(/["\\]/g, '\\$&');
-  }
 
   function init() {
     injectStyles();
