@@ -14,15 +14,16 @@ interface Props {
 }
 
 const TRANSAK_API_KEY = process.env.NEXT_PUBLIC_TRANSAK_API_KEY ?? '';
+const IS_PRODUCTION = process.env.NEXT_PUBLIC_TRANSAK_ENV === 'PRODUCTION';
 
-// Staging vs production widget URLs.
-// The JS SDK embeds these as iframes, but Transak's servers block iframe
-// embedding with X-Frame-Options. We open a centred popup instead —
-// same UX, no CORS/frame issues.
-const WIDGET_BASE =
-  process.env.NEXT_PUBLIC_TRANSAK_ENV === 'PRODUCTION'
-    ? 'https://global.transak.com'
-    : 'https://global-stg.transak.com';
+// Staging serves test tokens only on Polygon Amoy (not Base).
+// Production uses Base for real USDC settlement.
+const WIDGET_BASE = IS_PRODUCTION
+  ? 'https://global.transak.com'
+  : 'https://global-stg.transak.com';
+
+const NETWORK = IS_PRODUCTION ? 'base' : 'polygon';
+const CRYPTO = IS_PRODUCTION ? 'USDC' : 'USDC'; // staging delivers TRNSK test token regardless
 
 function buildWidgetUrl(
   mode: Mode,
@@ -33,8 +34,8 @@ function buildWidgetUrl(
   const params = new URLSearchParams({
     apiKey: TRANSAK_API_KEY,
     productsAvailed: mode,
-    cryptoCurrencyCode: 'USDC',
-    network: 'base',
+    cryptoCurrencyCode: CRYPTO,
+    network: NETWORK,
     fiatCurrency,
     hideMenu: 'true',
     themeColor: '3b82f6',
