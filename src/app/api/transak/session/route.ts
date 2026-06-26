@@ -55,10 +55,25 @@ export async function POST(req: NextRequest) {
     fiatCurrency?: string;
     defaultAmount?: string;
     referrerDomain?: string;
+    defaultPaymentMethod?: string;
   };
 
   const { mode, walletAddress, fiatCurrency = 'GBP', defaultAmount, referrerDomain } = body;
   const network = IS_PRODUCTION ? 'base' : 'polygon';
+
+  // Steer to the cheapest rail. Card on-ramp is ~10% on small amounts
+  // (mostly fixed interchange); Open Banking / bank transfer is ~0–1%.
+  // We use a *soft* default (defaultPaymentMethod) — the user can still
+  // switch if Open Banking isn't available in their region.
+  //   GBP  -> pm_open_banking (UK instant bank, near-zero fee)
+  //   EUR  -> sepa_bank_transfer
+  //   else -> leave to Transak's regional default
+  const DEFAULT_RAIL_BY_FIAT: Record<string, string> = {
+    GBP: 'pm_open_banking',
+    EUR: 'sepa_bank_transfer',
+  };
+  const defaultPaymentMethod =
+    body.defaultPaymentMethod ?? DEFAULT_RAIL_BY_FIAT[fiatCurrency.toUpperCase()];
 
   // Widget params — all sensitive params go here server-side, never in client URL
   const widgetParams: Record<string, string> = {
@@ -71,6 +86,11 @@ export async function POST(req: NextRequest) {
     hideMenu: 'true',
     themeColor: '3b82f6',
   };
+
+  // On-ramp only: nudge to the low-fee rail.
+  if (mode === 'BUY' && defaultPaymentMethod) {
+    widgetParams.defaultPaymentMethod = defaultPaymentMethod;
+  }
 
   if (walletAddress) {
     widgetParams.walletAddress = walletAddress;
