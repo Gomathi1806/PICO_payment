@@ -7,7 +7,6 @@ import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment, getUnlockedCo
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
-import TransakWidget from '@/components/TransakWidget';
 import UnlockedContent from '@/components/UnlockedContent';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
@@ -24,7 +23,6 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const [step, setStep] = useState<'idle' | 'connecting' | 'paying' | 'done'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showFundCard, setShowFundCard] = useState(false);
   const [unlockedUrl, setUnlockedUrl] = useState<string | null>(null);
 
   const { address, isConnected, connector } = useAccount();
@@ -279,16 +277,6 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
-  // Show the inline FundCard (Apple Pay / Google Pay / Card via Coinbase Onramp).
-  // For testnet, route to Circle faucet instead since onramp is mainnet-only.
-  const handlePreFund = () => {
-    if (!address) return;
-    if (chainId === 84532) {
-      window.open('https://faucet.circle.com/', '_blank');
-      return;
-    }
-    setShowFundCard(true);
-  };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '10rem 0' }}>Loading Pico...</div>;
   if (!link) return <div style={{ textAlign: 'center', padding: '10rem 0' }}>Link not found.</div>;
@@ -383,73 +371,73 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 )}
               </div>
 
-              {/* Bundle/Top-Up Info Warning for 0-balance users */}
-              {isConnected && !isBalanceSufficient && (
+              {/* No USDC? Plain guidance — on-ramps have £10-15 minimums,
+                  which is incompatible with sub-$1 micropayments. Direct
+                  users to Coinbase.com where they can buy $5+ and reuse
+                  the balance across many Pico links. */}
+              {isConnected && !isBalanceSufficient && chainId !== 84532 && (
                 <div style={{
-                  background: 'rgba(245, 158, 11, 0.08)',
-                  border: '1px solid rgba(245, 158, 11, 0.25)',
-                  borderRadius: '12px',
-                  padding: '0.8rem 1rem',
-                  marginBottom: '1.25rem',
-                  fontSize: '0.75rem',
-                  color: '#fbbf24',
-                  textAlign: 'left',
-                  lineHeight: '1.3'
-                }}>
-                  💡 <b>Bundle / Card Minimum Notice:</b> Since your wallet is empty, Coinbase will prompt you to fund a <b>minimum of $2.00 USDC</b> via Card/Apple Pay at checkout. The remaining balance (e.g. $1.50) stays in your wallet for your next unlock!
-                </div>
-              )}
-
-              {/* Inline on-ramp via Transak — replaces Coinbase FundCard */}
-              {isConnected && showFundCard && address && chainId !== 84532 && (
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <TransakWidget
-                    mode="BUY"
-                    walletAddress={address}
-                    fiatCurrency="GBP"
-                    defaultAmount={Math.max(Number(link.price) * 1.2, 5).toFixed(2)}
-                    onClose={() => {
-                      refetchBalance();
-                      setShowFundCard(false);
-                    }}
-                    onOrderSuccess={() => {
-                      refetchBalance();
-                      setShowFundCard(false);
-                    }}
-                  />
-                  <button
-                    onClick={() => setShowFundCard(false)}
-                    className="btn btn-secondary"
-                    style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.75rem', padding: '0.5rem' }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {/* Pre-Fund Wallet Credits (Credits Model) */}
-              {isConnected && !showFundCard && (
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.02)',
+                  background: 'rgba(255,255,255,0.02)',
                   border: '1px solid var(--card-border)',
                   borderRadius: '12px',
                   padding: '1rem',
                   marginBottom: '1.25rem',
-                  textAlign: 'left'
+                  textAlign: 'left',
                 }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '0.8rem', color: 'white', marginBottom: '0.4rem' }}>
-                    🔋 Pre-Fund Wallet Credits (Save Card Fees)
+                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'white', marginBottom: '0.5rem' }}>
+                    💡 You need {link.price} USDC on Base
                   </div>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.8rem', lineHeight: '1.3' }}>
-                    Add USDC via Apple Pay, Google Pay or card — no account needed. Inline checkout, no redirect.
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
+                    Buy USDC on <b style={{ color: 'white' }}>Coinbase.com</b> (from £2, no minimum), then send it to your Coinbase Smart Wallet below. The leftover balance works on any future Pico link — no repeat top-ups needed.
                   </p>
-                  <button
-                    onClick={handlePreFund}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <a
+                      href="https://www.coinbase.com/price/usd-coin"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary"
+                      style={{ width: '100%', padding: '0.65rem', fontSize: '0.78rem', textDecoration: 'none', textAlign: 'center' }}
+                    >
+                      🔗 Buy USDC on Coinbase.com →
+                    </a>
+                    <button
+                      onClick={handleRefreshBalance}
+                      className="btn btn-secondary"
+                      style={{ width: '100%', padding: '0.65rem', fontSize: '0.78rem' }}
+                    >
+                      {isRefreshing ? 'Checking…' : '🔄 I\'ve topped up — refresh balance'}
+                    </button>
+                  </div>
+                  {address && (
+                    <div style={{
+                      marginTop: '0.6rem',
+                      fontSize: '0.62rem',
+                      fontFamily: 'monospace',
+                      color: 'var(--text-muted)',
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid var(--card-border)',
+                      borderRadius: '6px',
+                      padding: '0.4rem 0.6rem',
+                      wordBreak: 'break-all',
+                    }}>
+                      Your wallet: {address}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Testnet faucet */}
+              {isConnected && !isBalanceSufficient && chainId === 84532 && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <a
+                    href="https://faucet.circle.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="btn btn-secondary"
-                    style={{ width: '100%', padding: '0.75rem', fontSize: '0.8rem', borderRadius: '8px' }}
+                    style={{ width: '100%', padding: '0.75rem', fontSize: '0.8rem', textDecoration: 'none', display: 'block', textAlign: 'center' }}
                   >
-                    {chainId === 84532 ? '🔗 Get Free Faucet USDC' : '🍎 Add Funds with Apple Pay / Card'}
-                  </button>
+                    🔗 Get free testnet USDC from Circle Faucet
+                  </a>
                 </div>
               )}
 
@@ -525,12 +513,11 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 </div>
               )}
 
-              {/* PRIMARY CTA — hidden while FundCard is open to avoid duplicate buttons */}
-              {!showFundCard && (
-                <button
+              {/* PRIMARY CTA */}
+              <button
                   className="btn btn-primary"
                   style={{ width: '100%', fontSize: '1rem', padding: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                  onClick={isConnected && !isBalanceSufficient ? handlePreFund : handlePayAndUnlock}
+                  onClick={handlePayAndUnlock}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
@@ -540,7 +527,6 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                     </>
                   ) : buttonLabel()}
                 </button>
-              )}
 
               {/* Trust badges */}
               <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
