@@ -31,8 +31,12 @@ function buildWidgetUrl(
   fiatCurrency: string,
   defaultAmount?: string,
 ): string {
+  const referrerDomain =
+    typeof window !== 'undefined' ? window.location.hostname : 'pico-payment.vercel.app';
+
   const params = new URLSearchParams({
     apiKey: TRANSAK_API_KEY,
+    referrerDomain,
     productsAvailed: mode,
     cryptoCurrencyCode: CRYPTO,
     network: NETWORK,
