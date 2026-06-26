@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useConnect, useAccount } from 'wagmi';
 import { getPicoLinks, getCreatorEarnings, getPerLinkStats, getRecentActivity, getUSDCtoGBP } from '@/app/actions/pico';
-import RampOfframpButton from '@/components/RampOfframpButton';
+import TransakWidget from '@/components/TransakWidget';
 import LegalFooter from '@/components/LegalFooter';
 import { calculateFeeBps } from '@/lib/constants';
 import { getUserById, updateWalletAddress } from '@/app/actions/auth';
@@ -35,6 +35,7 @@ export default function CreatorDashboard() {
   const [gbpRate, setGbpRate] = useState(0.78);
 
   const [isCashOutOpen, setIsCashOutOpen] = useState(false);
+  const [transakMode, setTransakMode] = useState<'BUY' | 'SELL' | null>(null);
 
   const userId = session?.user?.id;
   const handle = session?.user?.name;
@@ -402,85 +403,114 @@ export default function CreatorDashboard() {
             </div>
 
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-              Three ways to convert your USDC earnings to spendable money, ranked by speed.
+              Buy USDC with your card, or cash out your earnings straight to your bank — powered by Transak.
             </p>
 
-            {/* Option 1: Ramp Network 1-click (when approved) */}
-            <div style={{
-              padding: '1rem',
-              border: '1px solid var(--card-border)',
-              borderRadius: '12px',
-              marginBottom: '0.85rem',
-              background: 'rgba(59,130,246,0.04)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>🚀 Ramp — 1-click to UK bank</div>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
-                  0.99% · ~1 hour
-                </span>
+            {/* Transak widget shown inline when a mode is selected */}
+            {transakMode ? (
+              <div style={{ marginBottom: '1rem' }}>
+                <TransakWidget
+                  mode={transakMode}
+                  walletAddress={walletAddress ?? undefined}
+                  fiatCurrency="GBP"
+                  defaultAmount={transakMode === 'SELL' ? totalEarnings : undefined}
+                  onClose={() => setTransakMode(null)}
+                  onOrderSuccess={(id) => {
+                    console.log('[Pico] Transak order success', id);
+                    setTransakMode(null);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setTransakMode(null)}
+                  className="btn btn-secondary"
+                  style={{ width: '100%', marginTop: '0.6rem', fontSize: '0.78rem' }}
+                >
+                  ← Back
+                </button>
               </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.6rem', lineHeight: 1.4 }}>
-                Sell USDC straight to your UK bank via Faster Payments. KYC once, withdraw anytime after.
-              </p>
-              {walletAddress ? (
-                <RampOfframpButton walletAddress={walletAddress} />
-              ) : (
-                <div style={{ fontSize: '0.75rem', color: '#f87171' }}>Connect a wallet first.</div>
-              )}
-            </div>
+            ) : (
+              <>
+                {/* Off-ramp: sell USDC → GBP */}
+                <div style={{
+                  padding: '1rem',
+                  border: '1px solid rgba(59,130,246,0.3)',
+                  borderRadius: '12px',
+                  marginBottom: '0.85rem',
+                  background: 'rgba(59,130,246,0.04)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>🏦 Cash out — USDC → GBP bank transfer</div>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                      Transak · ~1–2 hrs
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.6rem', lineHeight: 1.4 }}>
+                    Sell your USDC earnings straight to your UK bank account via Faster Payments. KYC once, withdraw anytime.
+                  </p>
+                  {walletAddress ? (
+                    <button
+                      type="button"
+                      onClick={() => setTransakMode('SELL')}
+                      className="btn btn-primary"
+                      style={{ width: '100%', padding: '0.75rem', fontSize: '0.85rem' }}
+                    >
+                      💸 Cash out ${totalEarnings} USDC
+                    </button>
+                  ) : (
+                    <div style={{ fontSize: '0.75rem', color: '#f87171' }}>Connect a wallet first to cash out.</div>
+                  )}
+                </div>
 
-            {/* Option 2: Coinbase Card */}
-            <div style={{
-              padding: '1rem',
-              border: '1px solid var(--card-border)',
-              borderRadius: '12px',
-              marginBottom: '0.85rem',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>💳 Coinbase Card — spend USDC directly</div>
-                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
-                  Instant · 2% spread
-                </span>
-              </div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.6rem', lineHeight: 1.4 }}>
-                Free UK Visa card from Coinbase. Swipe anywhere Visa is accepted — your USDC auto-converts at checkout. No withdrawal needed.
-              </p>
-              <a
-                href="https://www.coinbase.com/card"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary"
-                style={{ width: '100%', padding: '0.7rem', fontSize: '0.8rem', textDecoration: 'none' }}
-              >
-                Order Coinbase Card →
-              </a>
-            </div>
+                {/* On-ramp: buy USDC with card */}
+                <div style={{
+                  padding: '1rem',
+                  border: '1px solid var(--card-border)',
+                  borderRadius: '12px',
+                  marginBottom: '0.85rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>💳 Buy USDC — card or bank transfer</div>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                      Transak · instant
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.6rem', lineHeight: 1.4 }}>
+                    Top up your wallet with USDC on Base using your debit card, credit card, or Open Banking.
+                  </p>
+                  {walletAddress ? (
+                    <button
+                      type="button"
+                      onClick={() => setTransakMode('BUY')}
+                      className="btn btn-secondary"
+                      style={{ width: '100%', padding: '0.75rem', fontSize: '0.85rem' }}
+                    >
+                      ➕ Buy USDC
+                    </button>
+                  ) : (
+                    <div style={{ fontSize: '0.75rem', color: '#f87171' }}>Connect a wallet first.</div>
+                  )}
+                </div>
 
-            {/* Option 3: Manual flow */}
-            <details style={{
-              padding: '0.85rem 1rem',
-              border: '1px solid var(--card-border)',
-              borderRadius: '12px',
-              marginBottom: '1rem',
-            }}>
-              <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem', listStyle: 'none' }}>
-                🐢 Manual flow (works today, no Ramp account needed)
-              </summary>
-              <ol style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.55, paddingLeft: '1.2rem', margin: '0.75rem 0' }}>
-                <li>Open your Coinbase Wallet (same one connected to Pico)</li>
-                <li>Send USDC to your Coinbase.com account (same email — instant, no fee)</li>
-                <li>On Coinbase.com, sell USDC → GBP at spot</li>
-                <li>Withdraw GBP via Faster Payments (free, ~30 min)</li>
-              </ol>
-              <a
-                href="https://www.coinbase.com/price/usd-coin"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: 'var(--accent)' }}
-              >
-                Open Coinbase →
-              </a>
-            </details>
+                {/* Manual fallback */}
+                <details style={{
+                  padding: '0.85rem 1rem',
+                  border: '1px solid var(--card-border)',
+                  borderRadius: '12px',
+                  marginBottom: '1rem',
+                }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem', listStyle: 'none' }}>
+                    🐢 Manual flow (no account needed)
+                  </summary>
+                  <ol style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.55, paddingLeft: '1.2rem', margin: '0.75rem 0' }}>
+                    <li>Open Coinbase Wallet (connected to Pico)</li>
+                    <li>Send USDC to your Coinbase.com account (same email — free)</li>
+                    <li>Sell USDC → GBP at spot on Coinbase.com</li>
+                    <li>Withdraw via Faster Payments (~30 min, free)</li>
+                  </ol>
+                </details>
+              </>
+            )}
 
             {walletAddress && (
               <div style={{

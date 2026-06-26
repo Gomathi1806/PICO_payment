@@ -7,7 +7,7 @@ import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment, getUnlockedCo
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
-import { FundCard } from '@coinbase/onchainkit/fund';
+import TransakWidget from '@/components/TransakWidget';
 import UnlockedContent from '@/components/UnlockedContent';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
@@ -400,21 +400,19 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 </div>
               )}
 
-              {/* Inline Apple Pay / Google Pay / Card via Coinbase Onramp */}
+              {/* Inline on-ramp via Transak — replaces Coinbase FundCard */}
               {isConnected && showFundCard && address && chainId !== 84532 && (
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <FundCard
-                    assetSymbol="USDC"
-                    country="GB"
-                    currency="GBP"
-                    presetAmountInputs={[
-                      Math.max(Number(link.price), 5).toFixed(2),
-                      '10',
-                      '20',
-                    ]}
-                    headerText="Add USDC with Apple Pay or Card"
-                    buttonText="Buy USDC"
-                    onSuccess={() => {
+                  <TransakWidget
+                    mode="BUY"
+                    walletAddress={address}
+                    fiatCurrency="GBP"
+                    defaultAmount={Math.max(Number(link.price) * 1.2, 5).toFixed(2)}
+                    onClose={() => {
+                      refetchBalance();
+                      setShowFundCard(false);
+                    }}
+                    onOrderSuccess={() => {
                       refetchBalance();
                       setShowFundCard(false);
                     }}
