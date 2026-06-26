@@ -13,54 +13,6 @@ interface Props {
   onOrderSuccess?: (orderId: string) => void;
 }
 
-const TRANSAK_API_KEY = process.env.NEXT_PUBLIC_TRANSAK_API_KEY ?? '';
-const IS_PRODUCTION = process.env.NEXT_PUBLIC_TRANSAK_ENV === 'PRODUCTION';
-
-// Staging serves test tokens only on Polygon Amoy (not Base).
-// Production uses Base for real USDC settlement.
-const WIDGET_BASE = IS_PRODUCTION
-  ? 'https://global.transak.com'
-  : 'https://global-stg.transak.com';
-
-const NETWORK = IS_PRODUCTION ? 'base' : 'polygon';
-const CRYPTO = IS_PRODUCTION ? 'USDC' : 'USDC'; // staging delivers TRNSK test token regardless
-
-function buildWidgetUrl(
-  mode: Mode,
-  walletAddress: string | undefined,
-  fiatCurrency: string,
-  defaultAmount?: string,
-): string {
-  const referrerDomain =
-    typeof window !== 'undefined' ? window.location.hostname : 'pico-payment.vercel.app';
-
-  const params = new URLSearchParams({
-    apiKey: TRANSAK_API_KEY,
-    referrerDomain,
-    productsAvailed: mode,
-    cryptoCurrencyCode: CRYPTO,
-    network: NETWORK,
-    fiatCurrency,
-    hideMenu: 'true',
-    themeColor: '3b82f6',
-  });
-
-  if (walletAddress) {
-    params.set('walletAddress', walletAddress);
-    params.set('disableWalletAddressEdit', 'true');
-  }
-
-  if (defaultAmount) {
-    if (mode === 'SELL') {
-      params.set('cryptoAmount', defaultAmount);
-    } else {
-      params.set('defaultFiatAmount', defaultAmount);
-    }
-  }
-
-  return `${WIDGET_BASE}?${params.toString()}`;
-}
-
 function openPopup(url: string): Window | null {
   const w = 450;
   const h = 700;
@@ -73,6 +25,31 @@ function openPopup(url: string): Window | null {
   );
 }
 
+async function fetchWidgetUrl(
+  mode: Mode,
+  walletAddress: string | undefined,
+  fiatCurrency: string,
+  defaultAmount: string | undefined,
+): Promise<string> {
+  const res = await fetch('/api/transak/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode,
+      walletAddress,
+      fiatCurrency,
+      defaultAmount,
+      referrerDomain: window.location.hostname,
+    }),
+  });
+  if (!res.ok) {
+    const { error } = await res.json() as { error?: string };
+    throw new Error(error ?? `Session API error ${res.status}`);
+  }
+  const { widgetUrl } = await res.json() as { widgetUrl: string };
+  return widgetUrl;
+}
+
 export default function TransakWidget({
   mode,
   walletAddress,
@@ -83,34 +60,51 @@ export default function TransakWidget({
 }: Props) {
   const popupRef = useRef<Window | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const widgetUrlRef = useRef<string | null>(null);
 
   const cleanup = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = null;
-    if (popupRef.current && !popupRef.current.closed) {
-      popupRef.current.close();
-    }
+    if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
     popupRef.current = null;
   }, []);
 
-  useEffect(() => {
-    if (!TRANSAK_API_KEY) return;
+  const openWidget = useCallback(async () => {
+    try {
+      // Reuse the same widgetUrl if we already fetched one (single-use per Transak)
+      // For reopening we need a fresh one.
+      const url = await fetchWidgetUrl(mode, walletAddress, fiatCurrency, defaultAmount);
+      widgetUrlRef.current = url;
 
-    const url = buildWidgetUrl(mode, walletAddress, fiatCurrency, defaultAmount);
-    const popup = openPopup(url);
-    popupRef.current = popup;
+      const popup = openPopup(url);
+      if (!popup) {
+        window.open(url, '_blank');
+        onClose?.();
+        return;
+      }
+      popupRef.current = popup;
 
-    if (!popup) {
-      // Popup blocked — fall back to new tab
-      window.open(url, '_blank');
-      onClose?.();
-      return;
+      // Poll for manual close
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(() => {
+        if (popupRef.current?.closed) {
+          cleanup();
+          onClose?.();
+        }
+      }, 1000);
+    } catch (err) {
+      console.error('[TransakWidget] failed to open:', err);
     }
+  }, [mode, walletAddress, fiatCurrency, defaultAmount, onClose, cleanup]);
 
-    // Listen for postMessage events from the Transak popup
+  // postMessage listener for order events
+  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (!event.origin.includes('transak.com')) return;
-      const { event_id, data } = (event.data ?? {}) as { event_id?: string; data?: { status?: { id?: string } } };
+      if (!String(event.origin).includes('transak.com')) return;
+      const { event_id, data } = (event.data ?? {}) as {
+        event_id?: string;
+        data?: { status?: { id?: string } };
+      };
       if (event_id === 'TRANSAK_ORDER_SUCCESSFUL') {
         onOrderSuccess?.(data?.status?.id ?? '');
         cleanup();
@@ -122,42 +116,16 @@ export default function TransakWidget({
       }
     };
     window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [onOrderSuccess, onClose, cleanup]);
 
-    // Poll every second — if user closes the popup manually, fire onClose
-    pollRef.current = setInterval(() => {
-      if (popupRef.current?.closed) {
-        cleanup();
-        onClose?.();
-      }
-    }, 1000);
-
-    return () => {
-      window.removeEventListener('message', handleMessage);
-      cleanup();
-    };
+  // Open on mount
+  useEffect(() => {
+    openWidget();
+    return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, walletAddress, fiatCurrency, defaultAmount]);
+  }, []);
 
-  if (!TRANSAK_API_KEY) {
-    return (
-      <div style={{
-        padding: '1.5rem',
-        background: 'rgba(245,158,11,0.08)',
-        border: '1px solid rgba(245,158,11,0.25)',
-        borderRadius: '12px',
-        fontSize: '0.82rem',
-        color: '#fbbf24',
-        textAlign: 'center',
-      }}>
-        ⚠️ Transak API key not configured.{' '}
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
-          Add <code>NEXT_PUBLIC_TRANSAK_API_KEY</code> to your environment variables.
-        </span>
-      </div>
-    );
-  }
-
-  // The widget opens in a popup — show a status card in the page
   return (
     <div style={{
       padding: '1.5rem',
@@ -179,12 +147,7 @@ export default function TransakWidget({
       </div>
       <button
         type="button"
-        onClick={() => {
-          const url = buildWidgetUrl(mode, walletAddress, fiatCurrency, defaultAmount);
-          const popup = openPopup(url);
-          if (!popup) window.open(url, '_blank');
-          else popupRef.current = popup;
-        }}
+        onClick={openWidget}
         className="btn btn-secondary"
         style={{ marginTop: '0.85rem', fontSize: '0.78rem', padding: '0.45rem 1rem' }}
       >
