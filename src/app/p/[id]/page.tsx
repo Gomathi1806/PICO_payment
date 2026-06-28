@@ -7,6 +7,7 @@ import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment, getUnlockedCo
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
+import TransakWidget from '@/components/TransakWidget';
 import UnlockedContent from '@/components/UnlockedContent';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
@@ -24,6 +25,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [unlockedUrl, setUnlockedUrl] = useState<string | null>(null);
+  const [showFundCard, setShowFundCard] = useState(false);
 
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -264,7 +266,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     // Block the loop: if balance is too low, route to fund flow instead of opening
     // the wallet only for it to reject with "insufficient funds".
     if (!isBalanceSufficient) {
-      setErrorMessage(`You need ${link.price} USDC. Tap "Add Funds" below, then refresh your balance.`);
+      setShowFundCard(true);
       return;
     }
 
@@ -275,6 +277,15 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     setIsRefreshing(true);
     await refetchBalance();
     setTimeout(() => setIsRefreshing(false), 800);
+  };
+
+  // Open the funding flow: Transak on mainnet, Circle faucet on testnet.
+  const handlePreFund = () => {
+    if (chainId === 84532) {
+      window.open('https://faucet.circle.com/', '_blank');
+      return;
+    }
+    setShowFundCard(true);
   };
 
 
@@ -371,11 +382,30 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 )}
               </div>
 
-              {/* No USDC? Plain guidance — on-ramps have £10-15 minimums,
-                  which is incompatible with sub-$1 micropayments. Direct
-                  users to Coinbase.com where they can buy $5+ and reuse
-                  the balance across many Pico links. */}
-              {isConnected && !isBalanceSufficient && chainId !== 84532 && (
+              {/* Inline Transak on-ramp (card / Apple Pay / Open Banking) */}
+              {isConnected && !isBalanceSufficient && chainId !== 84532 && showFundCard && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <TransakWidget
+                    mode="BUY"
+                    walletAddress={address}
+                    fiatCurrency="GBP"
+                    defaultAmount={Math.max(Number(link.price), 15).toFixed(2)}
+                    onClose={() => { refetchBalance(); setShowFundCard(false); }}
+                    onOrderSuccess={() => { refetchBalance(); setShowFundCard(false); }}
+                  />
+                  <button
+                    onClick={() => setShowFundCard(false)}
+                    className="btn btn-secondary"
+                    style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.78rem', padding: '0.5rem' }}
+                  >
+                    ← Back
+                  </button>
+                </div>
+              )}
+
+              {/* No USDC? Guidance: fund via Transak, or buy cheaper on
+                  Coinbase.com and reuse the balance across Pico links. */}
+              {isConnected && !isBalanceSufficient && chainId !== 84532 && !showFundCard && (
                 <div style={{
                   background: 'rgba(255,255,255,0.02)',
                   border: '1px solid var(--card-border)',
@@ -391,6 +421,13 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                     Buy USDC on <b style={{ color: 'white' }}>Coinbase.com</b> (from £2, no minimum), then send it to your Coinbase Smart Wallet below. The leftover balance works on any future Pico link — no repeat top-ups needed.
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <button
+                      onClick={handlePreFund}
+                      className="btn btn-primary"
+                      style={{ width: '100%', padding: '0.65rem', fontSize: '0.78rem' }}
+                    >
+                      💳 Add funds — card, Apple Pay or bank
+                    </button>
                     <a
                       href="https://www.coinbase.com/price/usd-coin"
                       target="_blank"
@@ -398,7 +435,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                       className="btn btn-secondary"
                       style={{ width: '100%', padding: '0.65rem', fontSize: '0.78rem', textDecoration: 'none', textAlign: 'center' }}
                     >
-                      🔗 Buy USDC on Coinbase.com →
+                      🔗 Or buy cheaper on Coinbase.com →
                     </a>
                     <button
                       onClick={handleRefreshBalance}
@@ -513,11 +550,12 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 </div>
               )}
 
-              {/* PRIMARY CTA */}
+              {/* PRIMARY CTA — hidden while the fund widget is open */}
+              {!showFundCard && (
               <button
                   className="btn btn-primary"
                   style={{ width: '100%', fontSize: '1rem', padding: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                  onClick={handlePayAndUnlock}
+                  onClick={isConnected && !isBalanceSufficient ? handlePreFund : handlePayAndUnlock}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
@@ -527,6 +565,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                     </>
                   ) : buttonLabel()}
                 </button>
+              )}
 
               {/* Trust badges */}
               <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
