@@ -4,6 +4,7 @@ import React, { useState, useEffect, use } from 'react';
 import { useConnect, useWriteContract, useAccount, useReadContract, useChainId, useSwitchChain, useDisconnect, useSendCalls } from 'wagmi';
 import { parseUnits, encodeFunctionData } from 'viem';
 import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment, getUnlockedContent } from '@/app/actions/pico';
+import { getCreditEligibility, redeemFreeUnlock } from '@/app/actions/giftcards';
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
@@ -26,6 +27,8 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [unlockedUrl, setUnlockedUrl] = useState<string | null>(null);
   const [showFundCard, setShowFundCard] = useState(false);
+  const [freeUnlockEligible, setFreeUnlockEligible] = useState(false);
+  const [redeemingFree, setRedeemingFree] = useState(false);
 
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -279,6 +282,62 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     setTimeout(() => setIsRefreshing(false), 800);
   };
 
+  // Check the Pico-funded "free first unlock" eligibility once we know
+  // the wallet address. Independent of balance — additive to the pay flow.
+  useEffect(() => {
+    if (!address) {
+      setFreeUnlockEligible(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { freeFirstUnlock } = await getCreditEligibility(address);
+      if (!cancelled) setFreeUnlockEligible(freeFirstUnlock);
+    })();
+    return () => { cancelled = true; };
+  }, [address]);
+
+  // Redeem the free first unlock (welcome voucher). Connects the wallet
+  // first if needed, then grants access without any payment.
+  const handleFreeUnlock = async () => {
+    if (!link) return;
+    setErrorMessage(null);
+
+    if (!isConnected) {
+      const cbConnector = connectors.find(
+        (c) => c.id === 'coinbaseWallet' || c.id === 'coinbaseWalletSDK',
+      );
+      if (!cbConnector) {
+        setErrorMessage('Wallet provider not found. Please refresh or try another browser.');
+        return;
+      }
+      try {
+        await connect({ connector: cbConnector });
+      } catch {
+        setErrorMessage('Wallet connection was cancelled. Please try again.');
+      }
+      return; // eligibility effect re-runs once connected; user taps again
+    }
+
+    if (!address) return;
+    setRedeemingFree(true);
+    try {
+      const res = await redeemFreeUnlock({ linkId: link.id, redeemerAddress: address });
+      if (res.success) {
+        setIsPaid(true);
+        setStep('done');
+        setFreeUnlockEligible(false);
+        if (res.contentUrl) setUnlockedUrl(res.contentUrl);
+      } else {
+        setErrorMessage(res.error || 'Could not unlock. Please try again.');
+      }
+    } catch {
+      setErrorMessage('Could not unlock. Please try again.');
+    } finally {
+      setRedeemingFree(false);
+    }
+  };
+
   // Open the funding flow: Transak on mainnet, Circle faucet on testnet.
   const handlePreFund = () => {
     if (chainId === 84532) {
@@ -381,6 +440,38 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                   </div>
                 )}
               </div>
+
+              {/* Welcome voucher — Pico-funded free first unlock. Additive:
+                  appears only when eligible; the pay + Transak flows are
+                  untouched and remain available below. */}
+              {freeUnlockEligible && !showFundCard && (
+                <div style={{
+                  marginBottom: '1.25rem',
+                  padding: '1rem',
+                  background: 'rgba(16,185,129,0.06)',
+                  border: '1px solid rgba(16,185,129,0.3)',
+                  borderRadius: '12px',
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                    🎁 Your first unlock is on us
+                  </div>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 0.7rem' }}>
+                    Welcome to Pico — unlock this one free, no payment needed. After that, top up once and unlock anything.
+                  </p>
+                  <button
+                    onClick={handleFreeUnlock}
+                    disabled={redeemingFree}
+                    className="btn btn-primary"
+                    style={{ width: '100%', padding: '0.85rem', fontSize: '0.9rem' }}
+                  >
+                    {redeemingFree
+                      ? 'Unlocking…'
+                      : isConnected
+                        ? '🎁 Unlock free'
+                        : '🎁 Unlock free with FaceID'}
+                  </button>
+                </div>
+              )}
 
               {/* Inline Transak on-ramp (card / Apple Pay / Open Banking) */}
               {isConnected && !isBalanceSufficient && chainId !== 84532 && showFundCard && (

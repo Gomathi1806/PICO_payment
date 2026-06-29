@@ -160,17 +160,34 @@ export async function getUnlockedContent(
   payerAddress: string,
 ) {
   try {
-    if (!txHash || !payerAddress) return { success: false, contentUrl: null };
+    if (!payerAddress) return { success: false, contentUrl: null };
 
-    const payment = await db.query.payments.findFirst({
-      where: (payments, { and, eq }) => and(
-        eq(payments.linkId, linkId),
-        eq(payments.txHash, txHash),
-        eq(payments.payerAddress, payerAddress),
-      ),
-    });
+    // Access is granted by EITHER a matching paid payment OR a redeemed
+    // gift-card voucher for this link + redeemer. Paid flow unchanged.
+    let granted = false;
 
-    if (!payment) return { success: false, contentUrl: null };
+    if (txHash) {
+      const payment = await db.query.payments.findFirst({
+        where: (payments, { and, eq }) => and(
+          eq(payments.linkId, linkId),
+          eq(payments.txHash, txHash),
+          eq(payments.payerAddress, payerAddress),
+        ),
+      });
+      if (payment) granted = true;
+    }
+
+    if (!granted) {
+      const redemption = await db.query.giftCardRedemptions.findFirst({
+        where: (r, { and, eq }) => and(
+          eq(r.linkId, linkId),
+          eq(r.redeemerId, payerAddress),
+        ),
+      });
+      if (redemption) granted = true;
+    }
+
+    if (!granted) return { success: false, contentUrl: null };
 
     const link = await db.query.picoLinks.findFirst({
       where: (picoLinks, { eq }) => eq(picoLinks.id, linkId),

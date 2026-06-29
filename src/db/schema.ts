@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, decimal, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, decimal, uuid, integer, boolean } from 'drizzle-orm/pg-core';
 
 // ─── Users ──────────────────────────────────────────────────
 // `role` decides which dashboard the user lands on after login and
@@ -74,3 +74,59 @@ export const widgetViews = pgTable('widget_views', {
 
 export type WidgetView = typeof widgetViews.$inferSelect;
 export type NewWidgetView = typeof widgetViews.$inferInsert;
+
+// ─── Gift Cards (Vouchers / Credits) ────────────────────────
+// A gift card is a VOUCHER that unlocks content — never cash, never
+// withdrawable. It is the access layer that sits beside `payments`:
+// content unlocks if a matching paid `payment` OR a redeemed gift card
+// exists. Pico never holds funds — whoever funds a card (Pico for
+// promos, a creator for giveaways, a fan for gifts, a brand for
+// sponsorships) pays the creator directly.
+//
+//   kind 'promo'   → Pico-funded welcome voucher (free first unlock)
+//   kind 'gift'    → fan pre-pays the creator, shares a code
+//   kind 'sponsor' → brand funds free reads
+//
+// `prefunded` = true means the creator was already paid at issue time
+// (gift/sponsor); false means Pico owes the creator and settles later
+// from its own treasury (promo). Either way no buyer money is held.
+export const GIFT_CARD_KINDS = ['promo', 'gift', 'sponsor'] as const;
+export type GiftCardKind = (typeof GIFT_CARD_KINDS)[number];
+
+export const giftCards = pgTable('gift_cards', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  code: text('code').unique(),                       // null for auto-applied promos
+  kind: text('kind').notNull().$type<GiftCardKind>(),
+  funderType: text('funder_type').notNull(),         // 'pico' | 'fan' | 'sponsor'
+  funderId: text('funder_id'),                       // who funded it (nullable)
+  scopeType: text('scope_type').notNull().default('any'), // 'link' | 'creator' | 'any'
+  scopeId: text('scope_id'),                         // linkId or creatorId
+  totalValue: decimal('total_value', { precision: 10, scale: 2 }).notNull(),
+  remaining: decimal('remaining', { precision: 10, scale: 2 }).notNull(),
+  prefunded: boolean('prefunded').notNull().default(false),
+  fundingTx: text('funding_tx'),                     // on-chain proof creator was prepaid
+  maxPerUser: integer('max_per_user').notNull().default(1),
+  status: text('status').notNull().default('active'),// active | depleted | expired | revoked
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export type GiftCard = typeof giftCards.$inferSelect;
+export type NewGiftCard = typeof giftCards.$inferInsert;
+
+// The access record — sibling of `payments`. One row = one unlock
+// granted via a voucher. `settled` tracks whether the creator has been
+// paid yet (promos are settled from the Pico treasury, batched).
+export const giftCardRedemptions = pgTable('gift_card_redemptions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  giftCardId: uuid('gift_card_id').notNull(),
+  linkId: uuid('link_id').notNull(),
+  redeemerId: text('redeemer_id').notNull(),         // wallet address or user id
+  valueUsed: decimal('value_used', { precision: 10, scale: 2 }).notNull(),
+  settled: boolean('settled').notNull().default(false),
+  settlementTx: text('settlement_tx'),               // Pico→creator tx (promo)
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export type GiftCardRedemption = typeof giftCardRedemptions.$inferSelect;
+export type NewGiftCardRedemption = typeof giftCardRedemptions.$inferInsert;
