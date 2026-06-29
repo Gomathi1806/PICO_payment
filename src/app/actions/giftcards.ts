@@ -1,8 +1,50 @@
 'use server';
 
 import { db } from '@/db';
-import { picoLinks, giftCards, giftCardRedemptions } from '@/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { picoLinks, users, giftCards, giftCardRedemptions } from '@/db/schema';
+import { and, eq, gte, sql } from 'drizzle-orm';
+import { createPublicClient, http, parseUnits, parseAbiItem, parseEventLogs } from 'viem';
+import { base } from 'viem/chains';
+import { randomBytes } from 'crypto';
+import { USDC_MAINNET_ADDRESS } from '@/lib/constants';
+
+const RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+const TRANSFER_EVENT = parseAbiItem(
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+);
+
+// Short, unguessable, URL-safe coupon code.
+function genCode(): string {
+  return randomBytes(9).toString('base64url'); // ~12 chars
+}
+
+// Confirm an on-chain USDC payment of >= `amount` to `recipient` in tx.
+// Used when a fan funds a gift card — the money goes straight to the
+// creator, and we only mint the voucher once we've verified it landed.
+async function verifyUsdcPayment(
+  txHash: string,
+  recipient: string,
+  amount: string,
+): Promise<boolean> {
+  try {
+    const client = createPublicClient({ chain: base, transport: http(RPC_URL) });
+    const receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
+    if (receipt.status !== 'success') return false;
+
+    const logs = parseEventLogs({ abi: [TRANSFER_EVENT], logs: receipt.logs });
+    const need = parseUnits(amount, 6);
+
+    return logs.some((l) => {
+      const sameToken = l.address.toLowerCase() === USDC_MAINNET_ADDRESS.toLowerCase();
+      const toCreator = (l.args.to as string).toLowerCase() === recipient.toLowerCase();
+      const enough = (l.args.value as bigint) >= need;
+      return sameToken && toCreator && enough;
+    });
+  } catch (error) {
+    console.error('[giftcards] verifyUsdcPayment failed:', error);
+    return false;
+  }
+}
 
 /**
  * Gift card (voucher) actions.
@@ -101,5 +143,217 @@ export async function redeemFreeUnlock(data: {
   } catch (error) {
     console.error('[giftcards] redeemFreeUnlock failed:', error);
     return { success: false, error: 'Could not unlock. Please try again.' };
+  }
+}
+
+/** Resolve a code for the claim page: status + the link it unlocks. */
+export async function getGiftCardInfo(code: string) {
+  try {
+    const card = await db.query.giftCards.findFirst({ where: eq(giftCards.code, code) });
+    if (!card) return { found: false as const };
+
+    let link: { id: string; title: string; type: string | null } | null = null;
+    if (card.scopeType === 'link' && card.scopeId) {
+      const l = await db.query.picoLinks.findFirst({ where: eq(picoLinks.id, card.scopeId) });
+      if (l) link = { id: l.id, title: l.title, type: l.type };
+    }
+
+    return {
+      found: true as const,
+      status: card.status,
+      scopeType: card.scopeType,
+      linkId: card.scopeType === 'link' ? card.scopeId : null,
+      remaining: card.remaining,
+      link,
+    };
+  } catch (error) {
+    console.error('[giftcards] getGiftCardInfo failed:', error);
+    return { found: false as const };
+  }
+}
+
+/**
+ * FAN GIFT — a fan pre-pays the creator on-chain, then we mint a shareable
+ * voucher. The money already went creator-direct (verified here); Pico
+ * just issues the code. Scope is one creator's content.
+ */
+export async function buyGiftCard(data: {
+  scopeType: 'creator' | 'link';
+  scopeId: string;
+  totalValue: string;        // USDC the fan paid
+  fundingTx: string;         // the fan's on-chain payment to the creator
+  funderAddress: string;
+}) {
+  try {
+    const { scopeType, scopeId, totalValue, fundingTx, funderAddress } = data;
+    if (!scopeId || !totalValue || !fundingTx) {
+      return { success: false, error: 'Missing gift details.' };
+    }
+
+    // Resolve the creator wallet that should have been paid.
+    let creatorId = scopeId;
+    if (scopeType === 'link') {
+      const link = await db.query.picoLinks.findFirst({ where: eq(picoLinks.id, scopeId) });
+      if (!link) return { success: false, error: 'Link not found.' };
+      creatorId = link.creatorId;
+    }
+    const creator = await db.query.users.findFirst({ where: eq(users.id, creatorId) });
+    if (!creator?.walletAddress) {
+      return { success: false, error: 'Creator has no wallet set up.' };
+    }
+
+    // Verify the fan actually paid the creator on-chain before minting.
+    const paid = await verifyUsdcPayment(fundingTx, creator.walletAddress, totalValue);
+    if (!paid) {
+      return { success: false, error: 'Could not verify your payment on-chain yet.' };
+    }
+
+    const code = genCode();
+    await db.insert(giftCards).values({
+      code,
+      kind: 'gift',
+      funderType: 'fan',
+      funderId: funderAddress,
+      scopeType,
+      scopeId,
+      totalValue,
+      remaining: totalValue,
+      prefunded: true,        // creator already paid → redemptions need no settlement
+      fundingTx,
+      maxPerUser: 1,
+      status: 'active',
+    });
+
+    return { success: true, code, claimUrl: `/claim/${code}` };
+  } catch (error) {
+    console.error('[giftcards] buyGiftCard failed:', error);
+    return { success: false, error: 'Could not create gift. Please try again.' };
+  }
+}
+
+/**
+ * CREATOR GIVEAWAY — a creator hands out free unlocks of their OWN
+ * content. No money moves (the creator simply forgoes revenue), so
+ * redemptions are settled immediately. One shareable code, redeemable
+ * `quantity` times (once per wallet).
+ */
+export async function createGiveaway(data: {
+  creatorId: string;
+  linkId: string;
+  quantity: number;
+}) {
+  try {
+    const { creatorId, linkId, quantity } = data;
+    const link = await db.query.picoLinks.findFirst({ where: eq(picoLinks.id, linkId) });
+    if (!link) return { success: false, error: 'Link not found.' };
+    if (link.creatorId !== creatorId) {
+      return { success: false, error: 'You can only give away your own content.' };
+    }
+    const qty = Math.max(1, Math.min(1000, Math.floor(quantity || 1)));
+    const total = (Number(link.price) * qty).toFixed(2);
+
+    const code = genCode();
+    await db.insert(giftCards).values({
+      code,
+      kind: 'gift',
+      funderType: 'creator',
+      funderId: creatorId,
+      scopeType: 'link',
+      scopeId: linkId,
+      totalValue: total,
+      remaining: total,
+      prefunded: true,        // creator's own content → nothing to settle
+      maxPerUser: 1,
+      status: 'active',
+    });
+
+    return { success: true, code, claimUrl: `/claim/${code}`, quantity: qty };
+  } catch (error) {
+    console.error('[giftcards] createGiveaway failed:', error);
+    return { success: false, error: 'Could not create giveaway. Please try again.' };
+  }
+}
+
+/**
+ * Redeem a coded voucher (gift or giveaway) against a link. Validates
+ * scope, prevents the same wallet redeeming twice, and atomically
+ * decrements the balance so a code can't be over-spent under load.
+ */
+export async function redeemByCode(data: {
+  code: string;
+  linkId: string;
+  redeemerAddress: string;
+}) {
+  try {
+    const { code, linkId, redeemerAddress } = data;
+    if (!code || !linkId || !redeemerAddress) {
+      return { success: false, error: 'Missing details.' };
+    }
+
+    const card = await db.query.giftCards.findFirst({ where: eq(giftCards.code, code) });
+    if (!card || card.status !== 'active') {
+      return { success: false, error: 'This code is not valid.' };
+    }
+    if (card.expiresAt && card.expiresAt.getTime() < Date.now()) {
+      return { success: false, error: 'This code has expired.' };
+    }
+
+    const link = await db.query.picoLinks.findFirst({ where: eq(picoLinks.id, linkId) });
+    if (!link) return { success: false, error: 'Link not found.' };
+
+    // Scope check — the code must apply to this content.
+    if (card.scopeType === 'link' && card.scopeId !== linkId) {
+      return { success: false, error: 'This code is not valid for this content.' };
+    }
+    if (card.scopeType === 'creator' && card.scopeId !== link.creatorId) {
+      return { success: false, error: 'This code is not valid for this content.' };
+    }
+
+    // One redemption per wallet per code.
+    const already = await db.query.giftCardRedemptions.findFirst({
+      where: and(
+        eq(giftCardRedemptions.giftCardId, card.id),
+        eq(giftCardRedemptions.redeemerId, redeemerAddress),
+      ),
+    });
+    if (already) {
+      return { success: true, contentUrl: link.contentUrl ?? null }; // idempotent re-unlock
+    }
+
+    // Atomic conditional decrement — only succeeds if enough remains.
+    const price = link.price;
+    const updated = await db
+      .update(giftCards)
+      .set({ remaining: sql`${giftCards.remaining} - ${price}` })
+      .where(
+        and(
+          eq(giftCards.id, card.id),
+          eq(giftCards.status, 'active'),
+          gte(giftCards.remaining, price),
+        ),
+      )
+      .returning();
+
+    if (!updated.length) {
+      return { success: false, error: 'This code has no balance left.' };
+    }
+
+    await db.insert(giftCardRedemptions).values({
+      giftCardId: card.id,
+      linkId,
+      redeemerId: redeemerAddress,
+      valueUsed: price,
+      settled: true,          // gift/giveaway are prefunded — nothing owed
+    });
+
+    // Mark depleted once it can't cover another unlock at this price.
+    if (Number(updated[0].remaining) < Number(price)) {
+      await db.update(giftCards).set({ status: 'depleted' }).where(eq(giftCards.id, card.id));
+    }
+
+    return { success: true, contentUrl: link.contentUrl ?? null };
+  } catch (error) {
+    console.error('[giftcards] redeemByCode failed:', error);
+    return { success: false, error: 'Could not redeem. Please try again.' };
   }
 }

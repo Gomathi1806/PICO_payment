@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useConnect, useAccount } from 'wagmi';
 import { getPicoLinks, getCreatorEarnings, getPerLinkStats, getRecentActivity, getUSDCtoGBP } from '@/app/actions/pico';
 import TransakWidget from '@/components/TransakWidget';
+import GiveawayButton from '@/components/GiveawayButton';
 import LegalFooter from '@/components/LegalFooter';
 import { calculateFeeBps } from '@/lib/constants';
 import { getUserById, updateWalletAddress } from '@/app/actions/auth';
@@ -310,6 +311,7 @@ export default function CreatorDashboard() {
                       >
                         Copy Link
                       </button>
+                      {userId && <GiveawayButton linkId={item.id} creatorId={userId} />}
                     </div>
                   </div>
                 </div>
