@@ -13,6 +13,13 @@ const TRANSFER_EVENT = parseAbiItem(
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 );
 
+// Pico-funded free first unlock is OFF by default (launch = Option 1:
+// creator giveaways + fan gifts only, which cost Pico nothing and need
+// no treasury payouts). Flip NEXT_PUBLIC_ENABLE_FREE_FIRST_UNLOCK=true
+// later to switch the welcome voucher on.
+const FREE_FIRST_UNLOCK_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_FREE_FIRST_UNLOCK === 'true';
+
 // Short, unguessable, URL-safe coupon code.
 function genCode(): string {
   return randomBytes(9).toString('base64url'); // ~12 chars
@@ -65,6 +72,7 @@ async function verifyUsdcPayment(
  */
 export async function getCreditEligibility(redeemerAddress: string | undefined) {
   try {
+    if (!FREE_FIRST_UNLOCK_ENABLED) return { freeFirstUnlock: false };
     if (!redeemerAddress) return { freeFirstUnlock: false };
 
     const prior = await db
@@ -96,6 +104,9 @@ export async function redeemFreeUnlock(data: {
   redeemerAddress: string;
 }) {
   try {
+    if (!FREE_FIRST_UNLOCK_ENABLED) {
+      return { success: false, error: 'Free unlock is not available.' };
+    }
     const { linkId, redeemerAddress } = data;
     if (!linkId || !redeemerAddress) {
       return { success: false, error: 'Missing details.' };

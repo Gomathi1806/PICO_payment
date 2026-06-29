@@ -7,6 +7,8 @@ import { createWalletClient, http, publicActions, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base } from 'viem/chains';
 import { USDC_MAINNET_ADDRESS, ERC20_ABI } from '@/lib/constants';
+import { auth } from '@/auth';
+import { isAdmin } from '@/lib/roles';
 
 /**
  * Creator settlement job.
@@ -130,6 +132,41 @@ export async function settleCreatorPromos(): Promise<SettlementResult> {
       totalUsdc: '0.00',
       error: error instanceof Error ? error.message : 'Settlement failed.',
     };
+  }
+}
+
+/**
+ * Manual reconciliation — mark outstanding promo debts as settled WITHOUT
+ * an on-chain transfer. Use after paying creators by hand (e.g. from
+ * Coinbase). Admin-gated for defence in depth. No treasury key needed.
+ */
+export async function markPromosSettledManually() {
+  const session = await auth();
+  const allowed = await isAdmin(session?.user?.id, session?.user?.email ?? undefined);
+  if (!allowed) {
+    return { success: false, settledCount: 0, error: 'Not authorized.' };
+  }
+
+  try {
+    const rows = await db
+      .select({ id: giftCardRedemptions.id })
+      .from(giftCardRedemptions)
+      .innerJoin(giftCards, eq(giftCards.id, giftCardRedemptions.giftCardId))
+      .where(and(eq(giftCardRedemptions.settled, false), eq(giftCards.prefunded, false)));
+
+    if (rows.length === 0) {
+      return { success: true, settledCount: 0 };
+    }
+
+    await db
+      .update(giftCardRedemptions)
+      .set({ settled: true, settlementTx: 'manual' })
+      .where(inArray(giftCardRedemptions.id, rows.map((r) => r.id)));
+
+    return { success: true, settledCount: rows.length };
+  } catch (error) {
+    console.error('[settlement] manual settle failed:', error);
+    return { success: false, settledCount: 0, error: 'Manual settlement failed.' };
   }
 }
 

@@ -6,6 +6,7 @@ import { getPlatformStats, getPlatformRecentPayments } from '@/app/actions/admin
 import { getAllWidgetStatsForAdmin } from '@/app/actions/widgets';
 import { getOutstandingPromoLiability } from '@/app/actions/settlement';
 import SettleNowButton from '@/components/SettleNowButton';
+import MarkSettledButton from '@/components/MarkSettledButton';
 import LegalFooter from '@/components/LegalFooter';
 
 /**
@@ -243,10 +244,24 @@ export default async function AdminDashboard() {
           <MiniStat label="Unsettled unlocks" value={(liabilityRes.count ?? 0).toString()} sub="awaiting payout" />
         </div>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '1rem' }}>
-          Pico-funded free unlocks are paid to creators from the treasury wallet
-          (<code>TREASURY_PRIVATE_KEY</code>). Runs automatically each day; use the button to settle on demand.
+          Launch mode (Option 1): free unlocks are <b>off</b> — Pico relies on creator giveaways
+          and fan gifts, which cost Pico nothing. If you enable free unlocks later, settle creators
+          either automatically (treasury key) or manually after paying them by hand.
         </p>
-        <SettleNowButton />
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div>
+            <SettleNowButton />
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+              Pays on-chain · needs <code>TREASURY_PRIVATE_KEY</code>
+            </div>
+          </div>
+          <div>
+            <MarkSettledButton />
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+              Reconcile only · use after paying by hand
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Operational reminders */}
