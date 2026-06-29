@@ -4,6 +4,8 @@ import { auth } from '@/auth';
 import { isAdmin } from '@/lib/roles';
 import { getPlatformStats, getPlatformRecentPayments } from '@/app/actions/admin';
 import { getAllWidgetStatsForAdmin } from '@/app/actions/widgets';
+import { getOutstandingPromoLiability } from '@/app/actions/settlement';
+import SettleNowButton from '@/components/SettleNowButton';
 import LegalFooter from '@/components/LegalFooter';
 
 /**
@@ -25,10 +27,11 @@ export default async function AdminDashboard() {
     redirect('/login?reason=admin-required');
   }
 
-  const [statsRes, recentRes, widgetsRes] = await Promise.all([
+  const [statsRes, recentRes, widgetsRes, liabilityRes] = await Promise.all([
     getPlatformStats(),
     getPlatformRecentPayments(25),
     getAllWidgetStatsForAdmin(),
+    getOutstandingPromoLiability(),
   ]);
 
   const stats = statsRes.success ? statsRes.stats : null;
@@ -222,6 +225,28 @@ export default async function AdminDashboard() {
             </table>
           </div>
         )}
+      </section>
+
+      {/* Gift card creator settlement */}
+      <section className="glass" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Creator settlement — free unlocks Pico owes</h2>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>auto-runs daily · 03:00 UTC</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <MiniStat
+            label="Outstanding liability"
+            value={`$${liabilityRes.outstanding}`}
+            sub="owed to creators (promos)"
+            tone={Number(liabilityRes.outstanding) > 0 ? 'warn' : 'ok'}
+          />
+          <MiniStat label="Unsettled unlocks" value={(liabilityRes.count ?? 0).toString()} sub="awaiting payout" />
+        </div>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '1rem' }}>
+          Pico-funded free unlocks are paid to creators from the treasury wallet
+          (<code>TREASURY_PRIVATE_KEY</code>). Runs automatically each day; use the button to settle on demand.
+        </p>
+        <SettleNowButton />
       </section>
 
       {/* Operational reminders */}

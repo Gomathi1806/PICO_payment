@@ -5,6 +5,7 @@ import { useConnect, useWriteContract, useAccount, useReadContract, useChainId, 
 import { parseUnits, encodeFunctionData } from 'viem';
 import { getPicoLinkById, getCreatorWalletByLinkId, recordPayment, getUnlockedContent } from '@/app/actions/pico';
 import { getCreditEligibility, redeemFreeUnlock } from '@/app/actions/giftcards';
+import GiftPurchase from '@/components/GiftPurchase';
 import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
@@ -673,6 +674,16 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                   </div>
                 )}
               </div>
+
+              {/* Gift to a friend — fan pays creator, friend redeems free */}
+              {!showFundCard && (
+                <GiftPurchase
+                  linkId={link.id}
+                  creatorWallet={creatorWallet}
+                  price={link.price}
+                  linkTitle={link.title}
+                />
+              )}
             </div>
           )}
         </div>
