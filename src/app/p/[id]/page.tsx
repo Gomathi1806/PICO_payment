@@ -292,11 +292,11 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     }
     let cancelled = false;
     (async () => {
-      const { freeFirstUnlock } = await getCreditEligibility(address);
+      const { freeFirstUnlock } = await getCreditEligibility(address, link?.id);
       if (!cancelled) setFreeUnlockEligible(freeFirstUnlock);
     })();
     return () => { cancelled = true; };
-  }, [address]);
+  }, [address, link?.id]);
 
   // Redeem the free first unlock (welcome voucher). Connects the wallet
   // first if needed, then grants access without any payment.

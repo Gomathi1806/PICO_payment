@@ -6,9 +6,14 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import { createPublicClient, http, parseUnits, parseAbiItem, parseEventLogs } from 'viem';
 import { base } from 'viem/chains';
 import { randomBytes } from 'crypto';
-import { USDC_MAINNET_ADDRESS } from '@/lib/constants';
+import { USDC_MAINNET_ADDRESS, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 
 const RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+
+// Guardrails for the Pico-funded free unlock (when enabled): only cheap
+// items qualify, and a daily budget caps how much float can be spent.
+const FREE_UNLOCK_MAX_PRICE = Number(process.env.NEXT_PUBLIC_FREE_UNLOCK_MAX_PRICE || '1.00');
+const FREE_UNLOCK_DAILY_BUDGET = Number(process.env.FREE_UNLOCK_DAILY_BUDGET || '50.00');
 const TRANSFER_EVENT = parseAbiItem(
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 );
@@ -31,7 +36,7 @@ function genCode(): string {
 async function verifyUsdcPayment(
   txHash: string,
   recipient: string,
-  amount: string,
+  minUnits: bigint,
 ): Promise<boolean> {
   try {
     const client = createPublicClient({ chain: base, transport: http(RPC_URL) });
@@ -39,7 +44,7 @@ async function verifyUsdcPayment(
     if (receipt.status !== 'success') return false;
 
     const logs = parseEventLogs({ abi: [TRANSFER_EVENT], logs: receipt.logs });
-    const need = parseUnits(amount, 6);
+    const need = minUnits;
 
     return logs.some((l) => {
       const sameToken = l.address.toLowerCase() === USDC_MAINNET_ADDRESS.toLowerCase();
@@ -70,10 +75,21 @@ async function verifyUsdcPayment(
  * Is this visitor eligible for the free first unlock?
  * Eligible when the address has never redeemed a promo voucher before.
  */
-export async function getCreditEligibility(redeemerAddress: string | undefined) {
+export async function getCreditEligibility(
+  redeemerAddress: string | undefined,
+  linkId?: string,
+) {
   try {
     if (!FREE_FIRST_UNLOCK_ENABLED) return { freeFirstUnlock: false };
     if (!redeemerAddress) return { freeFirstUnlock: false };
+
+    // Price cap — only cheap items qualify for a free unlock.
+    if (linkId) {
+      const link = await db.query.picoLinks.findFirst({ where: eq(picoLinks.id, linkId) });
+      if (!link || Number(link.price) > FREE_UNLOCK_MAX_PRICE) {
+        return { freeFirstUnlock: false };
+      }
+    }
 
     const prior = await db
       .select({ count: sql<number>`count(*)` })
@@ -119,9 +135,27 @@ export async function redeemFreeUnlock(data: {
     if (!link) return { success: false, error: 'Link not found.' };
 
     // Re-check eligibility server-side (never trust the client).
-    const { freeFirstUnlock } = await getCreditEligibility(redeemerAddress);
+    const { freeFirstUnlock } = await getCreditEligibility(redeemerAddress, linkId);
     if (!freeFirstUnlock) {
-      return { success: false, error: 'Free unlock already used.' };
+      return { success: false, error: 'Free unlock not available for this item.' };
+    }
+
+    // Price cap.
+    if (Number(link.price) > FREE_UNLOCK_MAX_PRICE) {
+      return { success: false, error: 'This item is not eligible for a free unlock.' };
+    }
+
+    // Daily budget — cap total free-unlock value granted today.
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todays = await db
+      .select({ amount: giftCardRedemptions.valueUsed })
+      .from(giftCardRedemptions)
+      .innerJoin(giftCards, eq(giftCards.id, giftCardRedemptions.giftCardId))
+      .where(and(eq(giftCards.kind, 'promo'), gte(giftCardRedemptions.createdAt, todayStart)));
+    const spentToday = todays.reduce((s, r) => s + Number(r.amount), 0);
+    if (spentToday + Number(link.price) > FREE_UNLOCK_DAILY_BUDGET) {
+      return { success: false, error: 'Free unlocks are all claimed for today — please try tomorrow.' };
     }
 
     // Mint a one-shot promo gift card scoped to this link, then redeem it.
@@ -214,7 +248,17 @@ export async function buyGiftCard(data: {
     }
 
     // Verify the fan actually paid the creator on-chain before minting.
-    const paid = await verifyUsdcPayment(fundingTx, creator.walletAddress, totalValue);
+    // When the platform fee is enabled, the creator receives the 95%
+    // share (Pico's 5% goes to the treasury in a separate transfer), so
+    // we verify against the creator's expected amount, not the gross.
+    const totalUnits = parseUnits(totalValue, 6);
+    const treasuryEnabled =
+      PICO_TREASURY_ADDRESS !== '0x0000000000000000000000000000000000000000';
+    const expectedCreatorUnits = treasuryEnabled
+      ? splitFee(totalUnits, Number(totalValue)).creatorAmount
+      : totalUnits;
+
+    const paid = await verifyUsdcPayment(fundingTx, creator.walletAddress, expectedCreatorUnits);
     if (!paid) {
       return { success: false, error: 'Could not verify your payment on-chain yet.' };
     }

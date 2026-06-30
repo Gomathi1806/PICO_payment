@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAccount, useConnect, useWriteContract, useChainId } from 'wagmi';
 import { parseUnits } from 'viem';
-import { ERC20_ABI, getUSDCConfig } from '@/lib/constants';
+import { ERC20_ABI, getUSDCConfig, splitFee, PICO_TREASURY_ADDRESS } from '@/lib/constants';
 import { buyGiftCard } from '@/app/actions/giftcards';
 
 /**
@@ -53,18 +53,43 @@ export default function GiftPurchase({
 
     setBusy(true);
     try {
-      const units = parseUnits(total, usdc.decimals);
-      const tx = await writeContractAsync({
-        address: usdc.address,
-        abi: ERC20_ABI,
-        functionName: 'transfer',
-        args: [creatorWallet as `0x${string}`, units],
-      });
+      const totalUnits = parseUnits(total, usdc.decimals);
+      const { fee, creatorAmount } = splitFee(totalUnits, Number(total));
+      const treasuryEnabled =
+        PICO_TREASURY_ADDRESS !== '0x0000000000000000000000000000000000000000' && fee > 0n;
+
+      // Creator share first — this is the tx we verify server-side.
+      // Pico's 5% fee follows as a best-effort second transfer.
+      let creatorTx: string;
+      if (treasuryEnabled) {
+        creatorTx = await writeContractAsync({
+          address: usdc.address,
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [creatorWallet as `0x${string}`, creatorAmount],
+        });
+        try {
+          await writeContractAsync({
+            address: usdc.address,
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [PICO_TREASURY_ADDRESS, fee],
+          });
+        } catch { /* fee best-effort — creator is already paid */ }
+      } else {
+        creatorTx = await writeContractAsync({
+          address: usdc.address,
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [creatorWallet as `0x${string}`, totalUnits],
+        });
+      }
+
       const res = await buyGiftCard({
         scopeType: 'link',
         scopeId: linkId,
         totalValue: total,
-        fundingTx: tx,
+        fundingTx: creatorTx,
         funderAddress: address,
       });
       if (res.success && res.claimUrl) {
