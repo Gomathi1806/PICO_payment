@@ -42,20 +42,16 @@ export default function PublishersPage() {
           BUILT ON x402 · THE INTERNET&apos;S PAYMENT STANDARD
         </div>
         <h1 className="text-gradient" style={{ fontSize: '2.4rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1rem' }}>
-          Charge per article. Keep 95%.
+          Sell your content for 20p. Keep 95%.
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1rem', maxWidth: '580px', margin: '0 auto 1rem', lineHeight: 1.5 }}>
-          The micropayment paywall for newsletters and journalism — sell single articles from <b style={{ color: 'white' }}>£0.20–£5</b> via Apple Pay or card. Built on <b style={{ color: 'white' }}>x402</b>, the open HTTP payment protocol from Coinbase, so your paywall works for humans <i>and</i> AI agents.
-        </p>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '500px', margin: '0 auto 2rem', lineHeight: 1.4 }}>
-          Targeting <b style={{ color: 'white' }}>newspapers and journalism</b>? See the{' '}
-          <Link href="/publishers/print" style={{ color: 'var(--accent)' }}>editorial paywall →</Link>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1rem', maxWidth: '580px', margin: '0 auto 2rem', lineHeight: 1.5 }}>
+          The micropayment tool for writers, podcasters, and creators — sell single articles, prompts, or exclusive posts from <b style={{ color: 'white' }}>£0.20–£5</b> via Apple Pay or card. No subscription. No signup. Built on <b style={{ color: 'white' }}>x402</b>, the open HTTP payment protocol from Coinbase.
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <a href="mailto:hello@pico.link?subject=Pico%20for%20Publishers%20%E2%80%94%20founding%20partner"
+          <Link href="/signup"
              className="btn btn-primary" style={{ padding: '0.85rem 1.5rem', fontSize: '0.9rem', textDecoration: 'none' }}>
-            Become a founding publisher
-          </a>
+            Start selling — free
+          </Link>
           <a href="#how" className="btn btn-secondary" style={{ padding: '0.85rem 1.5rem', fontSize: '0.9rem', textDecoration: 'none' }}>
             See how it works
           </a>

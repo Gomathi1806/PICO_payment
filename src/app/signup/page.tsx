@@ -8,20 +8,18 @@ import { signIn } from 'next-auth/react';
 import { registerUser, getHomeRouteForUser } from '@/app/actions/auth';
 import { getSession } from 'next-auth/react';
 
-type Role = 'creator' | 'publisher' | 'agent';
-
-const ROLE_OPTIONS: { id: Role; label: string; sub: string; emoji: string }[] = [
-  { id: 'creator', label: 'Creator', sub: 'Solo writer, artist, educator, or influencer', emoji: '✍️' },
-  { id: 'publisher', label: 'Publisher', sub: 'Newsroom, magazine, or media organisation', emoji: '📰' },
-  { id: 'agent', label: 'Developer / Agent', sub: 'Build agentic apps on the x402 protocol', emoji: '🤖' },
-];
+// Focused on Creator accounts only for now. Publisher and Agent role
+// support still exists in the schema and the role picker code is
+// preserved in git history — we're just hiding those options from the
+// primary onboarding flow while we prove the creator wedge.
+type Role = 'creator';
 
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [handle, setHandle] = useState('');
-  const [role, setRole] = useState<Role>('creator');
+  const role: Role = 'creator';
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -97,46 +95,6 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem', fontWeight: 'bold', letterSpacing: '0.08em' }}>
-              ACCOUNT TYPE
-            </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {ROLE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setRole(opt.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.8rem 1rem',
-                    background: role === opt.id ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.03)',
-                    border: '1px solid ' + (role === opt.id ? 'rgba(59,130,246,0.5)' : 'var(--card-border)'),
-                    borderRadius: '12px',
-                    color: 'white',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                >
-                  <span style={{ fontSize: '1.4rem' }}>{opt.emoji}</span>
-                  <span style={{ flex: 1 }}>
-                    <span style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem' }}>{opt.label}</span>
-                    <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{opt.sub}</span>
-                  </span>
-                  <span style={{
-                    width: '18px', height: '18px', borderRadius: '50%',
-                    border: '2px solid ' + (role === opt.id ? 'var(--accent)' : 'var(--card-border)'),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {role === opt.id && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)' }} />}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem', fontWeight: 'bold', letterSpacing: '0.08em' }}>
               EMAIL
