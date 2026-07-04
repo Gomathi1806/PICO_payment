@@ -35,7 +35,7 @@ export default function GiveawayButton({ linkId, creatorId }: { linkId: string; 
     return (
       <button
         className="btn btn-secondary"
-        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        style={{ padding: '0.5rem 0.6rem', fontSize: '0.72rem', borderRadius: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         onClick={() => { navigator.clipboard?.writeText(claimUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
         title={claimUrl}
       >
@@ -47,7 +47,7 @@ export default function GiveawayButton({ linkId, creatorId }: { linkId: string; 
   return (
     <button
       className="btn btn-secondary"
-      style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem' }}
+      style={{ padding: '0.5rem 0.6rem', fontSize: '0.72rem', borderRadius: '10px', whiteSpace: 'nowrap' }}
       onClick={handleGenerate}
       disabled={busy}
       title="Generate 10 free unlocks to give away"

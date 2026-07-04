@@ -60,7 +60,14 @@ export default function FileUploader({ onUploaded, currentUrl, disabled }: Props
       onUploaded(blob.url);
       setProgress(null);
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Upload failed';
+      let message = e instanceof Error ? e.message : 'Upload failed';
+      // The blob client wraps any /api/upload failure in this generic string —
+      // translate it into something a creator can act on.
+      if (/failed to retrieve the client token/i.test(message)) {
+        message =
+          'Could not start the upload — the file storage service rejected the request. ' +
+          'Make sure you are logged in, then try again. If it persists, use "Paste URL" instead.';
+      }
       setError(message);
       setProgress(null);
     }

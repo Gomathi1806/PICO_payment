@@ -268,51 +268,81 @@ export default function CreatorDashboard() {
               const feePct = Number(calculateFeeBps(Number(item.price))) / 100;
               return (
                 <div key={item.id} style={{
-                  padding: '1rem',
                   background: 'rgba(255,255,255,0.02)',
-                  borderRadius: '12px',
-                  border: '1px solid var(--card-border)'
+                  borderRadius: '14px',
+                  border: '1px solid var(--card-border)',
+                  overflow: 'hidden',
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>{item.title}</div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.15rem' }}>
-                        ${item.price} · {feePct}% fee
+                  {/* Title + price */}
+                  <div style={{ padding: '1rem 1rem 0.85rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: '0.62rem', fontWeight: 700, color: 'var(--accent)',
+                          letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.35rem',
+                        }}>
+                          {item.type || 'Link'}
+                        </div>
+                        <div style={{
+                          fontWeight: 600, fontSize: '0.95rem', lineHeight: 1.35,
+                          overflowWrap: 'anywhere',
+                        }}>
+                          {item.title}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', fontSize: '0.7rem', flexWrap: 'wrap' }}>
-                        <span style={{ color: s.sales > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
-                          💰 {s.sales} sale{s.sales === 1 ? '' : 's'}
-                        </span>
-                        <span style={{ color: 'var(--text-muted)' }}>
-                          📈 ${Number(s.earned).toFixed(2)} earned
-                        </span>
+                      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--success)', lineHeight: 1.2 }}>
+                          ${item.price}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {feePct}% fee
+                        </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      <Link
-                        href={`/dashboard/embed/${item.id}`}
-                        className="btn btn-secondary"
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', textDecoration: 'none' }}
-                        title="Get embed code for publisher integration"
-                      >
-                        📦 Embed
-                      </Link>
-                      <Link
-                        href={`/dashboard/edit/${item.id}`}
-                        className="btn btn-secondary"
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', textDecoration: 'none' }}
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        className="btn btn-secondary"
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem' }}
-                        onClick={() => handleCopy(item.id)}
-                      >
-                        Copy Link
-                      </button>
-                      {userId && <GiveawayButton linkId={item.id} creatorId={userId} />}
+
+                    {/* Stats */}
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem', fontSize: '0.72rem', flexWrap: 'wrap' }}>
+                      <span style={{ color: s.sales > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
+                        💰 {s.sales} sale{s.sales === 1 ? '' : 's'}
+                      </span>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        📈 ${Number(s.earned).toFixed(2)} earned
+                      </span>
                     </div>
+                  </div>
+
+                  {/* Actions — auto-fit grid so buttons wrap into neat rows on mobile */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))',
+                    gap: '0.4rem',
+                    padding: '0.75rem 1rem',
+                    borderTop: '1px solid var(--card-border)',
+                    background: 'rgba(255,255,255,0.015)',
+                  }}>
+                    <Link
+                      href={`/dashboard/embed/${item.id}`}
+                      className="btn btn-secondary"
+                      style={{ padding: '0.5rem 0.6rem', fontSize: '0.72rem', textDecoration: 'none', whiteSpace: 'nowrap', borderRadius: '10px' }}
+                      title="Get embed code for publisher integration"
+                    >
+                      📦 Embed
+                    </Link>
+                    <Link
+                      href={`/dashboard/edit/${item.id}`}
+                      className="btn btn-secondary"
+                      style={{ padding: '0.5rem 0.6rem', fontSize: '0.72rem', textDecoration: 'none', whiteSpace: 'nowrap', borderRadius: '10px' }}
+                    >
+                      ✏️ Edit
+                    </Link>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '0.5rem 0.6rem', fontSize: '0.72rem', whiteSpace: 'nowrap', borderRadius: '10px' }}
+                      onClick={() => handleCopy(item.id)}
+                    >
+                      🔗 Copy Link
+                    </button>
+                    {userId && <GiveawayButton linkId={item.id} creatorId={userId} />}
                   </div>
                 </div>
               );

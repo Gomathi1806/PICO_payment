@@ -26,6 +26,17 @@ const ALLOWED_CONTENT_TYPES = [
 const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
 
 export async function POST(request: Request): Promise<NextResponse> {
+  // Without this token @vercel/blob can't mint client upload tokens and the
+  // browser sees an opaque "Failed to retrieve the client token" error.
+  // Fail loudly with the real reason instead.
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    console.error('[blob upload] BLOB_READ_WRITE_TOKEN is not set — connect a Blob store to this project and pull envs (vercel env pull .env.local)');
+    return NextResponse.json(
+      { error: 'File uploads are not configured on this server yet. Use "Paste URL" instead, or ask the site owner to connect Vercel Blob storage.' },
+      { status: 503 },
+    );
+  }
+
   const body = (await request.json()) as HandleUploadBody;
 
   try {
