@@ -28,6 +28,23 @@ export const users = pgTable('users', {
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
+// ─── Password Reset Tokens ──────────────────────────────────
+// One row per reset request. We store a SHA-256 hash of the token —
+// never the token itself — so a DB leak can't be replayed into an
+// account takeover. Tokens are single-use (usedAt) and short-lived
+// (expiresAt). Issued either self-serve from /forgot-password or by
+// an admin from the /admin console.
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
 // ─── Pico Links (Content for Sale) ──────────────────────────
 export const picoLinks = pgTable('pico_links', {
   id: uuid('id').primaryKey().defaultRandom(),

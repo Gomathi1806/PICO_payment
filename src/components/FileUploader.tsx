@@ -9,6 +9,12 @@ interface Props {
   disabled?: boolean;
 }
 
+/** Lets parents open the file picker programmatically (e.g. from the
+ *  "Upload file" tab, which would otherwise be a no-op when already active). */
+export interface FileUploaderHandle {
+  open: () => void;
+}
+
 const MAX_BYTES = 50 * 1024 * 1024;
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp3,.m4a,.wav,.ogg';
 
@@ -21,7 +27,10 @@ const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.mp3,.m4a,.wav,.ogg';
  * Intentionally minimal: one click, one file, no chunking UI. 50MB files
  * over a 10 Mbps line finish in ~40s which is fine for a single bar.
  */
-export default function FileUploader({ onUploaded, currentUrl, disabled }: Props) {
+const FileUploader = React.forwardRef<FileUploaderHandle, Props>(function FileUploader(
+  { onUploaded, currentUrl, disabled },
+  ref,
+) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +40,8 @@ export default function FileUploader({ onUploaded, currentUrl, disabled }: Props
     if (disabled || progress !== null) return;
     inputRef.current?.click();
   };
+
+  React.useImperativeHandle(ref, () => ({ open: handlePick }));
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -153,4 +164,6 @@ export default function FileUploader({ onUploaded, currentUrl, disabled }: Props
       )}
     </div>
   );
-}
+});
+
+export default FileUploader;

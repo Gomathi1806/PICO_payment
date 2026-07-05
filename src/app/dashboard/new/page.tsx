@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { createPicoLink } from '@/app/actions/pico';
 import { detectContent, detectedKindToType } from '@/lib/contentType';
-import FileUploader from '@/components/FileUploader';
+import FileUploader, { type FileUploaderHandle } from '@/components/FileUploader';
 
 const CONTENT_TYPES = ['PDF', 'Article', 'Video', 'Audio', 'Image', 'Course', 'Other'];
 
@@ -26,6 +26,7 @@ export default function CreateNewLink() {
   const [typeAutoSet, setTypeAutoSet] = useState(true);
   const [contentMode, setContentMode] = useState<'upload' | 'url'>('upload');
   const [isSaving, setIsSaving] = useState(false);
+  const uploaderRef = useRef<FileUploaderHandle>(null);
 
   const userId = session?.user?.id;
   const handle = session?.user?.name;
@@ -196,7 +197,15 @@ export default function CreateNewLink() {
           {/* Gated content — tabbed Upload vs Paste URL */}
           <Field label="GATED CONTENT (UNLOCKED AFTER PAYMENT)">
             <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
-              <ModeTab active={contentMode === 'upload'} onClick={() => setContentMode('upload')}>
+              <ModeTab
+                active={contentMode === 'upload'}
+                onClick={() => {
+                  // Already on the upload tab → clicking again opens the file
+                  // picker instead of being a dead no-op.
+                  if (contentMode === 'upload') uploaderRef.current?.open();
+                  else setContentMode('upload');
+                }}
+              >
                 📎 Upload file
               </ModeTab>
               <ModeTab active={contentMode === 'url'} onClick={() => setContentMode('url')}>
@@ -206,6 +215,7 @@ export default function CreateNewLink() {
 
             {contentMode === 'upload' ? (
               <FileUploader
+                ref={uploaderRef}
                 currentUrl={contentUrl}
                 onUploaded={(url) => setContentUrl(url)}
               />

@@ -7,6 +7,7 @@ import { getAllWidgetStatsForAdmin } from '@/app/actions/widgets';
 import { getOutstandingPromoLiability } from '@/app/actions/settlement';
 import SettleNowButton from '@/components/SettleNowButton';
 import MarkSettledButton from '@/components/MarkSettledButton';
+import AdminPasswordReset from '@/components/AdminPasswordReset';
 import LegalFooter from '@/components/LegalFooter';
 
 /**
@@ -262,6 +263,20 @@ export default async function AdminDashboard() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* User support — password rescue */}
+      <section className="glass" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h2 style={{ fontSize: '1.05rem', margin: 0 }}>User support — password reset</h2>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>one-time link · 1 hour expiry</span>
+        </div>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '1rem' }}>
+          For users locked out of their account: generate a reset link and send it to them
+          over any channel you trust. Users can also self-serve at <code>/forgot-password</code> once
+          email delivery (<code>RESEND_API_KEY</code>) is configured.
+        </p>
+        <AdminPasswordReset />
       </section>
 
       {/* Operational reminders */}

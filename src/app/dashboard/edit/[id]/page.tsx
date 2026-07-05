@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, use } from 'react';
+import React, { useState, useEffect, useMemo, useRef, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { getPicoLinkForOwner, updatePicoLink } from '@/app/actions/pico';
 import { detectContent, detectedKindToType } from '@/lib/contentType';
-import FileUploader from '@/components/FileUploader';
+import FileUploader, { type FileUploaderHandle } from '@/components/FileUploader';
 
 const CONTENT_TYPES = ['PDF', 'Article', 'Video', 'Audio', 'Image', 'Course', 'Other'];
 const URL_REGEX = /(https?:\/\/\S+|www\.\S+)/i;
@@ -31,6 +31,7 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
   // clears or changes the URL field.
   const [typeAutoSet, setTypeAutoSet] = useState(false);
   const [contentMode, setContentMode] = useState<'upload' | 'url'>('url');
+  const uploaderRef = useRef<FileUploaderHandle>(null);
 
   const userId = session?.user?.id;
   const descriptionHasUrl = useMemo(() => URL_REGEX.test(description), [description]);
@@ -184,7 +185,14 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
 
         <Field label="GATED CONTENT (UNLOCKED AFTER PAYMENT)">
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem' }}>
-            <ModeTab active={contentMode === 'upload'} onClick={() => setContentMode('upload')}>
+            <ModeTab
+              active={contentMode === 'upload'}
+              onClick={() => {
+                // Already on the upload tab → open the file picker directly.
+                if (contentMode === 'upload') uploaderRef.current?.open();
+                else setContentMode('upload');
+              }}
+            >
               📎 Upload file
             </ModeTab>
             <ModeTab active={contentMode === 'url'} onClick={() => setContentMode('url')}>
@@ -194,6 +202,7 @@ export default function EditPicoLink(props: { params: Promise<{ id: string }> })
 
           {contentMode === 'upload' ? (
             <FileUploader
+              ref={uploaderRef}
               currentUrl={contentUrl}
               onUploaded={(url) => { setContentUrl(url); setTypeAutoSet(true); }}
             />
