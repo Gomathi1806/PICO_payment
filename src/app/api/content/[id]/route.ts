@@ -23,18 +23,36 @@ import { withDynamicX402 } from '@/lib/x402-config';
  * src/lib/x402-config.ts for the rationale.
  */
 
+// picoLinks.id is a Postgres UUID column. Passing a non-UUID string
+// makes the driver throw a "Failed query" error that our x402 wrapper
+// converts to an unhelpful 500 with the SQL text leaking out. Screen
+// obviously-invalid IDs before the query so bots and typos get a clean
+// 404 instead.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function loadLink(linkId: string) {
-  const link = await db.query.picoLinks.findFirst({
-    where: (picoLinks, { eq }) => eq(picoLinks.id, linkId),
-  });
-  if (!link) return null;
+  if (!linkId || !UUID_RE.test(linkId)) return null;
 
-  const creator = await db.query.users.findFirst({
-    where: eq(users.id, link.creatorId),
-  });
-  if (!creator?.walletAddress) return null;
+  try {
+    const link = await db.query.picoLinks.findFirst({
+      where: (picoLinks, { eq }) => eq(picoLinks.id, linkId),
+    });
+    if (!link) return null;
 
-  return { link, creatorWallet: creator.walletAddress as `0x${string}` };
+    const creator = await db.query.users.findFirst({
+      where: eq(users.id, link.creatorId),
+    });
+    if (!creator?.walletAddress) return null;
+
+    return { link, creatorWallet: creator.walletAddress as `0x${string}` };
+  } catch (e) {
+    // Defence in depth — any DB-level failure (bad connection, transient
+    // Neon outage) is treated as "link not lookup-able" rather than
+    // leaking the query. The outer 500 handler keeps the fallback for
+    // anything upstream that still throws.
+    console.error('[pico/x402] loadLink DB error:', e);
+    return null;
+  }
 }
 
 const handler = async (req: NextRequest) => {
