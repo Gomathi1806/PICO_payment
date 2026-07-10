@@ -31,17 +31,33 @@ export const DEFAULT_NETWORK = (NETWORK_ALIAS[
   (process.env.X402_NETWORK?.trim() || 'base-sepolia').toLowerCase()
 ] ?? 'eip155:84532') as string;
 
-// Two facilitators: CDP-backed for Coinbase networks, public x402.org as
-// fallback for testnets and during local development without CDP keys.
+// Facilitator setup.
+//
+// Order matters: x402ResourceServer probes clients in listed order for
+// scheme support. We put the public x402.org facilitator FIRST because
+// it supports Base mainnet AND Base Sepolia unconditionally — no
+// business KYB, no partner approval, no per-network entitlement gate.
+// CDP is added second AND only when both credentials are present, so a
+// project with no CDP setup (or a CDP account that isn't cleared for
+// mainnet — the typical UK situation while CDP KYB is pending) still
+// gets a fully working mainnet facilitator via x402.org.
+//
+// The previous ordering — CDP first — meant that any CDP account that
+// couldn't service the requested network took the whole endpoint down
+// with a 500, even though x402.org would have handled it fine.
 const facilitatorClients = [
-  new HTTPFacilitatorClient(
-    createFacilitatorConfig(
-      process.env.CDP_API_KEY_ID,
-      process.env.CDP_API_KEY_SECRET,
-    ),
-  ),
   new HTTPFacilitatorClient({ url: 'https://www.x402.org/facilitator' }),
 ];
+if (process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET) {
+  facilitatorClients.push(
+    new HTTPFacilitatorClient(
+      createFacilitatorConfig(
+        process.env.CDP_API_KEY_ID,
+        process.env.CDP_API_KEY_SECRET,
+      ),
+    ),
+  );
+}
 
 export const x402Server = new x402ResourceServer(facilitatorClients);
 
