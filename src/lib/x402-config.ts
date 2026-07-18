@@ -33,20 +33,23 @@ export const DEFAULT_NETWORK = (NETWORK_ALIAS[
 
 // Facilitator setup.
 //
-// Order matters: x402ResourceServer probes clients in listed order for
-// scheme support. We put the public x402.org facilitator FIRST because
-// it supports Base mainnet AND Base Sepolia unconditionally — no
-// business KYB, no partner approval, no per-network entitlement gate.
-// CDP is added second AND only when both credentials are present, so a
-// project with no CDP setup (or a CDP account that isn't cleared for
-// mainnet — the typical UK situation while CDP KYB is pending) still
-// gets a fully working mainnet facilitator via x402.org.
+// x402ResourceServer merges every client's /supported list at
+// initialize(); for a given (version, network, scheme) the EARLIEST
+// listed client wins, and a client whose /supported call fails is
+// skipped with a warning rather than taking the endpoint down.
 //
-// The previous ordering — CDP first — meant that any CDP account that
-// couldn't service the requested network took the whole endpoint down
-// with a 500, even though x402.org would have handled it fine.
+// Base MAINNET (eip155:8453) is the load-bearing case: prod runs with
+// X402_NETWORK=base. The x402.org public facilitator is testnet-only
+// for EVM (its /supported has eip155:84532 but NOT 8453 — verified
+// 2026-07-18), so on its own it 500s every mainnet request with
+// "facilitator not ready". PayAI's public facilitator serves
+// v2/exact on eip155:8453 (and 84532) with no API keys, so it is the
+// mainnet workhorse. x402.org stays first purely as the Sepolia
+// preference; CDP is appended last, only when credentials exist, as a
+// fallback for anything the first two don't cover.
 const facilitatorClients = [
   new HTTPFacilitatorClient({ url: 'https://www.x402.org/facilitator' }),
+  new HTTPFacilitatorClient({ url: 'https://facilitator.payai.network' }),
 ];
 if (process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET) {
   facilitatorClients.push(
