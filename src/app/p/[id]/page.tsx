@@ -10,6 +10,7 @@ import { isInAppBrowser, getBrowserName } from '@/lib/utils/browser';
 import { ERC20_ABI, getUSDCConfig, PICO_TREASURY_ADDRESS, splitFee } from '@/lib/constants';
 import { PicoLink } from '@/db/schema';
 import TransakWidget from '@/components/TransakWidget';
+import CoinbaseOnrampButton from '@/components/CoinbaseOnrampButton';
 import UnlockedContent from '@/components/UnlockedContent';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
@@ -474,7 +475,10 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 </div>
               )}
 
-              {/* Inline Transak on-ramp (card / Apple Pay / Open Banking) */}
+              {/* Inline on-ramp: two providers side by side so fans (and the
+                  Coinbase Onramp reviewer) can pick either. Both mint the
+                  session token server-side and open a popup — no secrets or
+                  wildcard-origin state ever hits the browser. */}
               {isConnected && !isBalanceSufficient && chainId !== 84532 && showFundCard && (
                 <div style={{ marginBottom: '1.25rem' }}>
                   <TransakWidget
@@ -485,6 +489,15 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                     onClose={() => { refetchBalance(); setShowFundCard(false); }}
                     onOrderSuccess={() => { refetchBalance(); setShowFundCard(false); }}
                   />
+                  <div style={{ marginTop: '0.6rem' }}>
+                    <CoinbaseOnrampButton
+                      linkId={link.id}
+                      walletAddress={address}
+                      fiatAmount={Math.max(Number(link.price), 5)}
+                      fiatCurrency="GBP"
+                      onClosed={() => { refetchBalance(); }}
+                    />
+                  </div>
                   <button
                     onClick={() => setShowFundCard(false)}
                     className="btn btn-secondary"

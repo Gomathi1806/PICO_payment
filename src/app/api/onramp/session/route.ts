@@ -132,17 +132,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    let json: { token?: string; channelId?: string };
+    let json: { token?: string; channel_id?: string };
     try {
       json = JSON.parse(responseText);
     } catch {
       return NextResponse.json({ error: 'Malformed response from Coinbase.' }, { status: 502 });
     }
 
+    // Coinbase returns snake_case (token, channel_id) per the CDP docs.
     // Only return what the browser needs — never leak our JWT or key id.
     return NextResponse.json({
       sessionToken: json.token,
-      channelId: json.channelId,
+      channelId: json.channel_id,
     });
   } catch (error) {
     console.error('[onramp/session] Coinbase call failed:', error);
