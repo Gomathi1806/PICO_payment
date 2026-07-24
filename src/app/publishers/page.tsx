@@ -230,7 +230,32 @@ export default function PublishersPage() {
         </p>
       </section>
 
-      <footer style={{ textAlign: 'center', marginTop: '3rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+      {/* Ecosystem trust strip — third-party validation of the x402 integration */}
+      <section style={{ marginTop: '3rem', textAlign: 'center' }}>
+        <div style={{
+          fontSize: '0.65rem', color: 'var(--text-muted)',
+          letterSpacing: '0.14em', textTransform: 'uppercase',
+          fontWeight: 600, marginBottom: '0.85rem',
+        }}>
+          Listed in the x402 ecosystem
+        </div>
+        <a
+          href="https://x402-list.com/services/pico?utm_source=badge&utm_medium=referral&utm_campaign=embed"
+          target="_blank"
+          rel="noopener"
+          style={{ display: 'inline-block' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://x402-list.com/badge/pico.svg?data=uptime&period=7d"
+            alt="Listed on x402-list — 7-day uptime"
+            height={28}
+            style={{ height: '28px', verticalAlign: 'middle' }}
+          />
+        </a>
+      </section>
+
+      <footer style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
         <p>© 2026 Pico Payments. Built on the <a href="https://www.x402.org" target="_blank" rel="noopener" style={{ color: 'var(--accent)' }}>x402 protocol</a>, Coinbase Smart Wallet &amp; Base L2.</p>
         <p style={{ marginTop: '0.5rem' }}>
           Cryptoasset purchases facilitated by Transak Pty Ltd (FCA #928910). Cryptoassets are high-risk, unregulated investments — you may lose all the money you invest.
