@@ -1,41 +1,63 @@
-import { SignJWT, importPKCS8 } from 'jose';
+import { SignJWT } from 'jose';
 import crypto from 'node:crypto';
 
 /**
  * Coinbase Developer Platform (CDP) auth helper.
  *
  * Coinbase's REST APIs on api.developer.coinbase.com require a signed
- * JWT per request. The JWT is short-lived (~2 minutes), scoped to a
- * single METHOD + host + path, and includes a nonce so it can't be
- * replayed.
+ * JWT per request. Per the official spec
+ * (docs.cdp.coinbase.com/get-started/authentication/jwt-authentication,
+ * verified 2026-07-18):
  *
- * Two things to know:
+ *   payload:  iss="cdp", sub=<key id>, aud=["cdp_service"],
+ *             nbf/iat=now, exp=now+120s,
+ *             uri="<METHOD> <host><path>"  (no protocol, e.g.
+ *             "POST api.developer.coinbase.com/onramp/v1/token")
+ *   header:   alg, kid=<key id>, typ="JWT", nonce=<random per token>
  *
- *  1. The private key CDP issues is either Ed25519 (PEM, newer default)
- *     or ES256 P-256 (PEM, older). This helper handles both — jose's
- *     importPKCS8 accepts either PEM format if you pass the matching
- *     algorithm. We detect the algorithm from the PEM header.
+ * KEY FORMATS — this is the part that bites people:
  *
- *  2. Coinbase's spec puts the `nonce` in the JWT HEADER (not the
- *     payload) — this is deliberately non-standard. `SignJWT`'s
- *     `setProtectedHeader` covers it.
+ *   • Ed25519 Secret API Keys (the current default when you create a
+ *     key in the CDP portal) are delivered as a BASE64 STRING of
+ *     64 raw bytes — 32-byte seed + 32-byte public key. NOT PEM.
+ *     Sign with alg "EdDSA".
  *
- * The private key sits in Vercel encrypted env vars (CDP_API_KEY_SECRET),
- * server-side only. It never leaves the process, never lands in a
- * client-side bundle, never appears in logs.
+ *   • Legacy ECDSA keys are PEM ("-----BEGIN EC PRIVATE KEY-----").
+ *     Sign with alg "ES256".
+ *
+ * We detect the format from the secret itself and build a Node
+ * KeyObject either way (jose's SignJWT accepts KeyObjects in Node).
+ * The secret lives in Vercel encrypted env vars, server-side only.
  */
 
-const CDP_JWT_TTL_SECONDS = 120; // Coinbase enforces short-lived tokens
+const CDP_JWT_TTL_SECONDS = 120; // fixed window per Coinbase spec
 
-function detectAlgorithm(pem: string): 'EdDSA' | 'ES256' {
-  // Ed25519 keys start with -----BEGIN PRIVATE KEY----- (PKCS8 wrapper)
-  // and are ~48 bytes long — much shorter than P-256.
-  // P-256 keys typically use -----BEGIN EC PRIVATE KEY----- (SEC1) or
-  // longer PKCS8 blobs (~121 bytes base64).
-  if (pem.includes('BEGIN EC PRIVATE KEY')) return 'ES256';
-  // For PKCS8, length heuristic: Ed25519 PKCS8 is significantly smaller
-  const body = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  return body.length < 100 ? 'EdDSA' : 'ES256';
+// PKCS8 DER prefix for an Ed25519 private key: wrapping the raw
+// 32-byte seed in this header yields a key Node's crypto can import.
+// (SEQUENCE { version 0, AlgorithmIdentifier { id-Ed25519 }, OCTET STRING { seed } })
+const ED25519_PKCS8_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+
+function keyFromSecret(secret: string): { key: crypto.KeyObject; alg: 'EdDSA' | 'ES256' } {
+  if (secret.includes('BEGIN')) {
+    // PEM path — createPrivateKey handles PKCS8 and SEC1 ("EC PRIVATE
+    // KEY") wrappers alike, which importPKCS8 from jose does not.
+    const key = crypto.createPrivateKey(secret);
+    const alg = key.asymmetricKeyType === 'ed25519' ? 'EdDSA' : 'ES256';
+    return { key, alg };
+  }
+
+  // Base64 Ed25519 path (current CDP default). 64 bytes = seed ‖ pubkey;
+  // only the 32-byte seed goes into the PKCS8 wrapper.
+  const raw = Buffer.from(secret, 'base64');
+  if (raw.length !== 64 && raw.length !== 32) {
+    throw new Error(
+      `CDP_API_KEY_SECRET is neither PEM nor a 64-byte base64 Ed25519 key (decoded ${raw.length} bytes).`,
+    );
+  }
+  const seed = raw.subarray(0, 32);
+  const pkcs8 = Buffer.concat([ED25519_PKCS8_PREFIX, seed]);
+  const key = crypto.createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
+  return { key, alg: 'EdDSA' };
 }
 
 /**
@@ -57,13 +79,13 @@ export async function generateCdpJwt(
     throw new Error('CDP_API_KEY_ID or CDP_API_KEY_SECRET is not configured.');
   }
 
-  const alg = detectAlgorithm(apiKeySecret);
-  const key = await importPKCS8(apiKeySecret, alg);
+  const { key, alg } = keyFromSecret(apiKeySecret);
   const nonce = crypto.randomBytes(16).toString('hex');
   const now = Math.floor(Date.now() / 1000);
 
   return await new SignJWT({
-    // Coinbase's spec: URI claim ties this token to a single request.
+    // Ties this token to exactly one request. Spec format has no
+    // protocol prefix: "POST api.developer.coinbase.com/onramp/v1/token"
     uri: `${method} ${host}${path}`,
   })
     .setProtectedHeader({ alg, typ: 'JWT', kid: apiKeyId, nonce })
