@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useConnect, useAccount } from 'wagmi';
 import { getPicoLinks, getCreatorEarnings, getPerLinkStats, getRecentActivity, getUSDCtoGBP } from '@/app/actions/pico';
 import TransakWidget from '@/components/TransakWidget';
+import CoinbaseOfframpButton from '@/components/CoinbaseOfframpButton';
 import GiveawayButton from '@/components/GiveawayButton';
 import LegalFooter from '@/components/LegalFooter';
 import { calculateFeeBps } from '@/lib/constants';
@@ -395,7 +396,7 @@ export default function CreatorDashboard() {
       <section style={{ marginTop: '3rem' }}>
         <div className="glass" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            Earnings are instantly settled on Base. Cash out via Ramp, Coinbase Card, or manual transfer.
+            Earnings are instantly settled on Base. Cash out via Transak, Coinbase, or manual transfer.
           </p>
           <button
             className="btn btn-secondary"
@@ -492,6 +493,32 @@ export default function CreatorDashboard() {
                   ) : (
                     <div style={{ fontSize: '0.75rem', color: '#f87171' }}>Connect a wallet first to cash out.</div>
                   )}
+                </div>
+
+                {/* Off-ramp alternative: Coinbase Onramp/Offramp (v3/sell/input).
+                    Sits alongside Transak so creators pick whichever they
+                    already have an account with. Auth is by NextAuth session,
+                    so the /api/offramp/session endpoint won't mint a token
+                    for anyone not logged in as this creator. */}
+                <div style={{
+                  padding: '1rem',
+                  border: '1px solid var(--card-border)',
+                  borderRadius: '12px',
+                  marginBottom: '0.85rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>🅲 Cash out — via Coinbase</div>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.04)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                      Coinbase · direct
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.6rem', lineHeight: 1.4 }}>
+                    Sell your USDC directly through Coinbase and withdraw to your linked bank account. Requires a Coinbase account.
+                  </p>
+                  <CoinbaseOfframpButton
+                    walletAddress={walletAddress ?? undefined}
+                    fiatCurrency="GBP"
+                  />
                 </div>
 
                 {/* On-ramp: buy USDC with card */}
