@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSignMessage } from 'wagmi';
 
 interface Props {
   linkId: string;
@@ -14,15 +15,19 @@ interface Props {
  * Coinbase Onramp launcher — sits alongside TransakWidget as a second
  * fiat funding option on the fan payment page.
  *
- * Flow, per docs.cdp.coinbase.com/onramp/introduction/quickstart:
- *   1. POST to our backend /api/onramp/session (the endpoint that
- *      auth-gates and signs a CDP JWT server-side — the fan never
- *      sees a key)
- *   2. Backend returns { sessionToken } from Coinbase
- *   3. Open https://pay.coinbase.com/buy/select-asset?sessionToken=…
- *      in a popup so the fan doesn't leave the article
- *   4. Poll for popup close; the payment page's balance refetch handles
- *      the "unlock" side once USDC lands
+ * Flow, per docs.cdp.coinbase.com/onramp/introduction/quickstart and
+ * the Onramp security requirements:
+ *   1. Ask /api/onramp/challenge for a nonce to sign.
+ *   2. Sign it with the connected wallet — this is the "Wallet
+ *      Signature Authentication" Coinbase asks for, and it's free
+ *      (a message signature, not a transaction).
+ *   3. POST challenge + signature to /api/onramp/session, which
+ *      verifies them, attaches the caller's IP, and signs a CDP JWT
+ *      server-side — the fan never sees a key.
+ *   4. Open https://pay.coinbase.com/buy/select-asset?sessionToken=…
+ *      in a popup so the fan doesn't leave the article.
+ *   5. Poll for popup close, then let the payment page pick the
+ *      checkout back up once the USDC lands.
  *
  * Session tokens are single-use and expire in 5 minutes, so we fetch a
  * fresh one every click and never cache it.
@@ -35,9 +40,11 @@ export default function CoinbaseOnrampButton({
   onClosed,
 }: Props) {
   const [busy, setBusy] = useState(false);
+  const [signing, setSigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const popupRef = useRef<Window | null>(null);
+  const { signMessageAsync } = useSignMessage();
 
   // Unmount cleanup — if the parent hides this button while the popup
   // poll is still running, clear the interval so it doesn't tick on a
@@ -61,11 +68,46 @@ export default function CoinbaseOnrampButton({
     setBusy(true);
 
     try {
-      // 1. Mint session token via our backend (server-side JWT + CDP call)
+      // 1. Get a challenge to prove control of the receiving wallet.
+      const challengeRes = await fetch('/api/onramp/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkId, walletAddress }),
+      });
+      if (!challengeRes.ok) {
+        const { error: msg } = (await challengeRes.json().catch(() => ({}))) as { error?: string };
+        throw new Error(msg ?? `Could not start authentication (${challengeRes.status})`);
+      }
+      const { challenge, message } = (await challengeRes.json()) as {
+        challenge?: string;
+        message?: string;
+      };
+      if (!challenge || !message) throw new Error('Malformed challenge from server.');
+
+      // 2. Sign it. Free, gasless, and moves nothing — but it proves the
+      //    wallet is the fan's before we mint a funding session for it.
+      setSigning(true);
+      let signature: string;
+      try {
+        signature = await signMessageAsync({ message });
+      } catch {
+        throw new Error('Signature declined — needed to verify your wallet.');
+      } finally {
+        setSigning(false);
+      }
+
+      // 3. Mint session token via our backend (server-side JWT + CDP call)
       const res = await fetch('/api/onramp/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ linkId, walletAddress, fiatAmount, fiatCurrency }),
+        body: JSON.stringify({
+          linkId,
+          walletAddress,
+          fiatAmount,
+          fiatCurrency,
+          challenge,
+          signature,
+        }),
       });
       if (!res.ok) {
         const { error: msg } = (await res.json().catch(() => ({}))) as { error?: string };
@@ -111,7 +153,7 @@ export default function CoinbaseOnrampButton({
       setError(message);
       setBusy(false);
     }
-  }, [busy, walletAddress, linkId, fiatAmount, fiatCurrency, onClosed]);
+  }, [busy, walletAddress, linkId, fiatAmount, fiatCurrency, onClosed, signMessageAsync]);
 
   return (
     <div>
@@ -122,7 +164,11 @@ export default function CoinbaseOnrampButton({
         className="btn btn-primary"
         style={{ width: '100%', padding: '0.85rem', fontSize: '0.85rem' }}
       >
-        {busy ? 'Opening Coinbase…' : '🅲 Pay with Coinbase — Apple Pay / Card'}
+        {signing
+          ? 'Confirm in wallet…'
+          : busy
+            ? 'Opening Coinbase…'
+            : '🅲 Pay with Coinbase — Apple Pay / Card'}
       </button>
       {error && (
         <div style={{

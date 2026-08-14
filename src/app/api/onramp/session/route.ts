@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createPublicClient, http } from 'viem';
+import { base } from 'viem/chains';
 import { db } from '@/db';
 import { picoLinks } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { generateCdpJwt } from '@/lib/cdp-auth';
+import { challengeMessage, clientIpFrom, verifyChallenge } from '@/lib/onramp-auth';
 
 /**
  * Backend Onramp session-token minter.
@@ -12,22 +15,27 @@ import { generateCdpJwt } from '@/lib/cdp-auth';
  * is the server-side gate: it authenticates the caller, generates a
  * short-lived CDP JWT with our private key (held in Vercel encrypted
  * env vars), calls Coinbase's session-token endpoint, and returns only
- * the client_secret to the browser.
+ * the session token to the browser.
  *
- * Authentication model for fans (who don't sign up to Pico):
- *   The request must reference a real Pico link UUID that exists in
- *   our DB. That constraint means bots can't spam this endpoint to
- *   generate free session tokens for arbitrary addresses — every
- *   session is tied to a real content transaction. Combined with
- *   Vercel's per-function rate limits and same-origin CORS (this
- *   route only accepts requests from pico-payment.vercel.app), that's
- *   sufficient for the current risk profile.
+ * Authentication (docs.cdp.coinbase.com/onramp/security-requirements):
+ *   Wallet Signature Authentication. The caller must present a
+ *   challenge we issued at /api/onramp/challenge plus a signature over
+ *   it from the very wallet the session would fund. We verify the
+ *   signature on-chain-aware — viem's verifyMessage covers EOAs, EIP-1271
+ *   contract wallets, and ERC-6492 counterfactual ones, which matters
+ *   because most Pico fans arrive on a Coinbase Smart Wallet.
+ *
+ *   An earlier revision only checked that the linkId existed. Pico links
+ *   are public by design, so that gated nothing: anyone could mint
+ *   sessions for arbitrary addresses. Proving control of the receiving
+ *   wallet is what actually binds a session to a real user.
  *
  * Response shape mirrors the Onramp v1 token endpoint.
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+const SIGNATURE_RE = /^0x[0-9a-fA-F]+$/;
 const ALLOWED_FIATS = new Set(['GBP', 'USD', 'EUR']);
 const CDP_HOST = 'api.developer.coinbase.com';
 const CDP_PATH = '/onramp/v1/token';
@@ -37,6 +45,8 @@ interface Body {
   walletAddress?: string;
   fiatAmount?: number;
   fiatCurrency?: string;
+  challenge?: string;
+  signature?: string;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -60,6 +70,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const walletAddress = (body.walletAddress || '').trim();
   const fiatCurrency = (body.fiatCurrency || 'GBP').toUpperCase();
   const fiatAmount = Number.isFinite(body.fiatAmount) ? Number(body.fiatAmount) : 5;
+  const challenge = (body.challenge || '').trim();
+  const signature = (body.signature || '').trim();
 
   // Input validation — cheap rejects before we spend a CDP call.
   if (!UUID_RE.test(linkId)) {
@@ -74,10 +86,52 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (fiatAmount < 1 || fiatAmount > 1000) {
     return NextResponse.json({ error: 'fiatAmount must be between 1 and 1000.' }, { status: 400 });
   }
+  if (!challenge || !SIGNATURE_RE.test(signature)) {
+    return NextResponse.json(
+      { error: 'Wallet signature required. Request a challenge first.' },
+      { status: 401 },
+    );
+  }
 
-  // Auth for anonymous fans: the linkId must exist. This ties every
-  // session token to a real content transaction and prevents random
-  // scripts from minting free tokens against our CDP account.
+  // Coinbase requires the end user's IP so the quote can only be used by
+  // the browser that asked for it. Vercel rewrites x-forwarded-for at the
+  // edge, so the caller can't forge this.
+  const clientIp = clientIpFrom(request.headers);
+  if (!clientIp) {
+    return NextResponse.json({ error: 'Could not determine client IP.' }, { status: 400 });
+  }
+
+  // Auth step 1: is this a challenge we issued, for this wallet, link
+  // and host, still inside its 5-minute window?
+  const payload = verifyChallenge(challenge, { host: host ?? '', address: walletAddress, linkId });
+  if (!payload) {
+    return NextResponse.json(
+      { error: 'Challenge invalid or expired. Please try again.' },
+      { status: 401 },
+    );
+  }
+
+  // Auth step 2: did the wallet that will receive the funds actually
+  // sign it? verifyMessage handles EOA, EIP-1271 and ERC-6492 wallets.
+  try {
+    const publicClient = createPublicClient({
+      chain: base,
+      transport: http(process.env.BASE_RPC_URL || 'https://mainnet.base.org'),
+    });
+    const valid = await publicClient.verifyMessage({
+      address: walletAddress as `0x${string}`,
+      message: challengeMessage(payload),
+      signature: signature as `0x${string}`,
+    });
+    if (!valid) {
+      return NextResponse.json({ error: 'Signature does not match wallet.' }, { status: 401 });
+    }
+  } catch (error) {
+    console.error('[onramp/session] signature verification failed:', error);
+    return NextResponse.json({ error: 'Signature verification failed.' }, { status: 401 });
+  }
+
+  // The link must exist — every session stays tied to real content.
   try {
     const link = await db.query.picoLinks.findFirst({
       where: eq(picoLinks.id, linkId),
@@ -110,6 +164,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     assets: ['USDC'],
     presetFiatAmount: fiatAmount,
     fiatCurrency,
+    clientIp,
   };
 
   try {

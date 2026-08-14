@@ -31,6 +31,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const [showFundCard, setShowFundCard] = useState(false);
   const [freeUnlockEligible, setFreeUnlockEligible] = useState(false);
   const [redeemingFree, setRedeemingFree] = useState(false);
+  const [awaitingFunds, setAwaitingFunds] = useState(false);
 
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -278,6 +279,35 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
     await executePay();
   };
 
+  // Single-checkout funding. When a fiat on-ramp popup closes the USDC
+  // takes a few seconds to land on Base, so we poll the balance and
+  // resume the unlock the fan already started — no second click, no
+  // manual refresh. Both halves of checkout (fiat top-up, then the
+  // content payment) complete from the fan's original "Pay".
+  //
+  // All state changes happen in the interval callback rather than the
+  // effect body: the chain is the external system we're subscribing to.
+  useEffect(() => {
+    if (!awaitingFunds || !link) return;
+    const startedAt = Date.now();
+    const id = setInterval(async () => {
+      // Give up after 3 minutes so an abandoned purchase stops polling.
+      if (Date.now() - startedAt > 3 * 60 * 1000) {
+        setAwaitingFunds(false);
+        return;
+      }
+      const { data } = await refetchBalance();
+      const funded = data ? Number(data) / 10 ** usdcConfig.decimals : 0;
+      if (funded >= Number(link.price)) {
+        setAwaitingFunds(false);
+        setShowFundCard(false);
+        executePay();
+      }
+    }, 5000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [awaitingFunds, link, refetchBalance, usdcConfig.decimals]);
+
   const handleRefreshBalance = async () => {
     setIsRefreshing(true);
     await refetchBalance();
@@ -486,8 +516,8 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                     walletAddress={address}
                     fiatCurrency="GBP"
                     defaultAmount={Math.max(Number(link.price), 15).toFixed(2)}
-                    onClose={() => { refetchBalance(); setShowFundCard(false); }}
-                    onOrderSuccess={() => { refetchBalance(); setShowFundCard(false); }}
+                    onClose={() => { refetchBalance(); setAwaitingFunds(true); }}
+                    onOrderSuccess={() => { refetchBalance(); setAwaitingFunds(true); }}
                   />
                   <div style={{ marginTop: '0.6rem' }}>
                     <CoinbaseOnrampButton
@@ -495,11 +525,24 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                       walletAddress={address}
                       fiatAmount={Math.max(Number(link.price), 5)}
                       fiatCurrency="GBP"
-                      onClosed={() => { refetchBalance(); }}
+                      onClosed={() => { refetchBalance(); setAwaitingFunds(true); }}
                     />
                   </div>
+                  {awaitingFunds && (
+                    <div style={{
+                      marginTop: '0.6rem',
+                      padding: '0.55rem 0.75rem',
+                      background: 'rgba(59,130,246,0.08)',
+                      border: '1px solid rgba(59,130,246,0.3)',
+                      borderRadius: '8px',
+                      fontSize: '0.75rem',
+                      textAlign: 'center',
+                    }}>
+                      ⏳ Waiting for your USDC to arrive — the unlock will finish automatically.
+                    </div>
+                  )}
                   <button
-                    onClick={() => setShowFundCard(false)}
+                    onClick={() => { setAwaitingFunds(false); setShowFundCard(false); }}
                     className="btn btn-secondary"
                     style={{ width: '100%', marginTop: '0.5rem', fontSize: '0.78rem', padding: '0.5rem' }}
                   >
