@@ -16,8 +16,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
+          {/*
+            projectId, not apiKey. OnchainKitProvider takes both, and they
+            are different credentials: apiKey wants a CDP *Client API Key*
+            (only needed for OnchainKit's API-backed features — swap quotes,
+            token search — none of which we import), while projectId wants
+            the CDP Project ID. We were passing the project ID as apiKey,
+            which authenticated nothing.
+          */}
           <OnchainKitProvider
-            apiKey={process.env.NEXT_PUBLIC_CDP_PROJECT_ID}
+            projectId={process.env.NEXT_PUBLIC_CDP_PROJECT_ID}
             chain={base}
             config={{
               appearance: { mode: 'dark', theme: 'default' },
