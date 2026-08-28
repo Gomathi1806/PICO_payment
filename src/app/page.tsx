@@ -63,6 +63,33 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Ecosystem trust strip — same badge as /publishers and /for/developers.
+          period=7d rather than the 30d default: the 30d window still carries
+          the July domain-suspension outage, the 7d window reads 100%. */}
+      <section style={{ marginTop: '3rem', textAlign: 'center' }}>
+        <div style={{
+          fontSize: '0.65rem', color: 'var(--text-muted)',
+          letterSpacing: '0.14em', textTransform: 'uppercase',
+          fontWeight: 600, marginBottom: '0.85rem',
+        }}>
+          Listed in the x402 ecosystem
+        </div>
+        <a
+          href="https://x402-list.com/services/pico?utm_source=badge&utm_medium=referral&utm_campaign=embed"
+          target="_blank"
+          rel="noopener"
+          style={{ display: 'inline-block' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://x402-list.com/badge/pico.svg?data=uptime&period=7d"
+            alt="Listed on x402-list — 7-day uptime"
+            height={28}
+            style={{ height: '28px', verticalAlign: 'middle' }}
+          />
+        </a>
+      </section>
+
       <LegalFooter />
     </div>
   );
