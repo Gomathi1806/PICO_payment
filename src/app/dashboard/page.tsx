@@ -9,6 +9,7 @@ import TransakWidget from '@/components/TransakWidget';
 import CoinbaseOfframpButton from '@/components/CoinbaseOfframpButton';
 import GiveawayButton from '@/components/GiveawayButton';
 import LegalFooter from '@/components/LegalFooter';
+import TrustStrip from '@/components/TrustStrip';
 import { calculateFeeBps } from '@/lib/constants';
 import { getUserById, updateWalletAddress } from '@/app/actions/auth';
 import { PicoLink } from '@/db/schema';
@@ -587,10 +588,12 @@ export default function CreatorDashboard() {
               </div>
             )}
 
+            <TrustStrip variant="creator" />
+
             <button
               onClick={() => setIsCashOutOpen(false)}
               className="btn btn-secondary"
-              style={{ width: '100%', fontSize: '0.8rem' }}
+              style={{ width: '100%', fontSize: '0.8rem', marginTop: '1rem' }}
             >
               Close
             </button>

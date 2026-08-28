@@ -12,6 +12,7 @@ import { PicoLink } from '@/db/schema';
 import TransakWidget from '@/components/TransakWidget';
 import CoinbaseOnrampButton from '@/components/CoinbaseOnrampButton';
 import UnlockedContent from '@/components/UnlockedContent';
+import TrustStrip from '@/components/TrustStrip';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
@@ -716,20 +717,14 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
               )}
 
               {/* Trust badges */}
-              <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>⚡ Powered by Coinbase Smart Wallet — no seed phrase, no MetaMask</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>🔐 Authenticate with FaceID or fingerprint</span>
-                </div>
+              <TrustStrip variant="fan">
                 {isIAB && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></div>
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Verified {browserName} Checkout</span>
                   </div>
                 )}
-              </div>
+              </TrustStrip>
 
               {/* Gift to a friend — fan pays creator, friend redeems free */}
               {!showFundCard && (
