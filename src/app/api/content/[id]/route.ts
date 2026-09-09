@@ -3,6 +3,9 @@ import { db } from '@/db';
 import { picoLinks, users, payments, widgetViews } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { withDynamicX402 } from '@/lib/x402-config';
+import { PICO_TREASURY_ADDRESS } from '@/lib/constants';
+
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 
 /**
  * x402 paywalled content endpoint.
@@ -17,10 +20,13 @@ import { withDynamicX402 } from '@/lib/x402-config';
  * gated contentUrl is only revealed once the facilitator confirms the
  * on-chain settlement.
  *
- * Phase 1: payTo = creator's wallet directly (100% to creator, no
- * Pico fee on x402 flows yet). The atomic 95/5 split happens on the
- * direct /p/[id] page via EIP-5792 batched calls, not here. See
- * src/lib/x402-config.ts for the rationale.
+ * Fee capture: x402's exact scheme has one payTo per request. Until we
+ * ship the PicoRouter splitter contract, we collect the fee off-chain
+ * by routing the full payment to the Pico treasury and settling 95% to
+ * the creator in a batched payout. The `payments` row records linkId +
+ * gross amount so the settlement job knows who is owed what. If the
+ * treasury address is unset (local dev), we fall back to direct-to-
+ * creator so the flow still works end-to-end without a treasury.
  */
 
 // picoLinks.id is a Postgres UUID column. Passing a non-UUID string
@@ -117,9 +123,19 @@ export const GET = withDynamicX402(handler, async (req) => {
     }
   });
 
+  const treasuryConfigured =
+    PICO_TREASURY_ADDRESS && PICO_TREASURY_ADDRESS.toLowerCase() !== ZERO_ADDR;
+  const payTo = treasuryConfigured ? PICO_TREASURY_ADDRESS : loaded.creatorWallet;
+
+  if (!treasuryConfigured) {
+    console.warn(
+      '[pico/x402] NEXT_PUBLIC_PICO_TREASURY_ADDRESS not set — routing 100% to creator, platform fee NOT collected on this request.',
+    );
+  }
+
   return {
     price: `$${loaded.link.price}`,
-    payTo: loaded.creatorWallet,
+    payTo: payTo as `0x${string}`,
     description: `Unlock: ${loaded.link.title}`,
   };
 });

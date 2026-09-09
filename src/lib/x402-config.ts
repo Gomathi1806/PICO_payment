@@ -12,12 +12,14 @@ import { NextRequest, NextResponse } from 'next/server';
  * per request (the creator's wallet for the given Pico link), not a
  * single fixed operator address.
  *
- * Phase 1 limitation: x402 sends payment to ONE address per request.
- * To preserve Pico's 5% revenue share, we'd need a router/splitter
- * contract. For now, x402 routes pay 100% to the creator. The direct
- * /p/[id] page keeps using EIP-5792 atomic batched calls which DO
- * collect the 5% fee — that's the hybrid model. Phase 2 will deploy
- * a PicoRouter contract and switch payTo to that.
+ * x402's exact scheme allows exactly one payTo per request. Until the
+ * PicoRouter splitter contract ships, we collect the platform fee
+ * off-chain: x402 routes send the full payment to the Pico treasury
+ * (NEXT_PUBLIC_PICO_TREASURY_ADDRESS), the `payments` table records
+ * gross-per-link, and creators are settled 95% in a batched payout.
+ * The direct /p/[id] page keeps its atomic 95/5 EIP-5792 batch — that
+ * path splits on-chain in a single tx and pays creators instantly.
+ * When Phase 2 lands, x402 will point at PicoRouter for on-chain split.
  */
 
 const NETWORK_ALIAS: Record<string, 'eip155:8453' | 'eip155:84532'> = {
@@ -27,9 +29,11 @@ const NETWORK_ALIAS: Record<string, 'eip155:8453' | 'eip155:84532'> = {
   'eip155:84532': 'eip155:84532',
 };
 
+// Default to Base MAINNET. Prod, staging, and any deploy that faces real
+// users must land here. Local dev opts into testnet with X402_NETWORK=base-sepolia.
 export const DEFAULT_NETWORK = (NETWORK_ALIAS[
-  (process.env.X402_NETWORK?.trim() || 'base-sepolia').toLowerCase()
-] ?? 'eip155:84532') as string;
+  (process.env.X402_NETWORK?.trim() || 'base').toLowerCase()
+] ?? 'eip155:8453') as string;
 
 // Facilitator setup.
 //

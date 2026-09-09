@@ -6,18 +6,6 @@ export default function LandingPage() {
   return (
     <div className="animate-fade">
       <header style={{ textAlign: 'center', marginTop: '4rem' }}>
-        <div style={{ 
-          display: 'inline-block', 
-          padding: '4px 12px', 
-          background: 'rgba(59, 130, 246, 0.1)', 
-          borderRadius: '100px', 
-          color: 'var(--accent)',
-          fontSize: '0.8rem',
-          fontWeight: '600',
-          marginBottom: '1rem'
-        }}>
-          PREVIEW RELEASE
-        </div>
         <h1 className="text-gradient" style={{ fontSize: '3.5rem', lineHeight: '1.1', fontWeight: 800 }}>
           Pico.
         </h1>
@@ -42,7 +30,7 @@ export default function LandingPage() {
             <div>
               <div style={{ color: 'var(--accent)', fontWeight: 'bold', marginBottom: '0.5rem' }}>01. No &ldquo;Platform Tax&rdquo;</div>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                Keep 98% of your revenue. No 30% Apple tax. No high Stripe fixed fees.
+                Keep 95% of your revenue at $10 and under — even less fee at higher tiers. No 30% Apple tax. No high Stripe fixed fees.
               </p>
             </div>
             
