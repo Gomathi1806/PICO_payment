@@ -463,6 +463,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                   </div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                     Network: <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{usdcConfig.name}</span>
+                    {' '}or <span style={{ color: '#c4b5fd', fontWeight: 'bold' }}>Arc</span>
                   </div>
                 </div>
 

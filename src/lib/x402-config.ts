@@ -14,14 +14,11 @@ import { NextRequest, NextResponse } from 'next/server';
  * per request (the creator's wallet for the given Pico link), not a
  * single fixed operator address.
  *
- * x402's exact scheme allows exactly one payTo per request. Until the
- * PicoRouter splitter contract ships, we collect the platform fee
- * off-chain: x402 routes send the full payment to the Pico treasury
- * (NEXT_PUBLIC_PICO_TREASURY_ADDRESS), the `payments` table records
- * gross-per-link, and creators are settled 95% in a batched payout.
- * The direct /p/[id] page keeps its atomic 95/5 EIP-5792 batch — that
- * path splits on-chain in a single tx and pays creators instantly.
- * When Phase 2 lands, x402 will point at PicoRouter for on-chain split.
+ * x402's exact scheme allows exactly one payTo per payment option and
+ * can't split atomically, so x402 unlocks pay the creator 100% directly
+ * on every network — Pico never holds buyer funds. The platform fee is
+ * collected only on the direct /p/[id] checkout, whose EIP-5792 batch
+ * splits creator + fee on-chain in a single tx.
  */
 
 export type PicoNetwork = 'eip155:8453' | 'eip155:84532' | 'eip155:5042';
@@ -168,7 +165,7 @@ export async function ensureX402Ready() {
  */
 export function withDynamicX402(
   handler: (req: NextRequest) => Promise<NextResponse>,
-  resolve: (req: NextRequest, network: PicoNetwork) => Promise<
+  resolve: (req: NextRequest) => Promise<
     | { price: string; payTo: `0x${string}`; description: string }
     | null
   >,
@@ -177,42 +174,41 @@ export function withDynamicX402(
     try {
       await ensureX402Ready();
 
-      const requestedNet =
-        req.headers.get('x-x402-network') ||
-        new URL(req.url).searchParams.get('network') ||
-        DEFAULT_NETWORK;
-      const targetNetwork = (NETWORK_ALIAS[requestedNet.trim().toLowerCase()] ??
-        DEFAULT_NETWORK) as PicoNetwork;
-
-      const config = await resolve(req, targetNetwork);
+      const config = await resolve(req);
       if (!config) {
         // Free path — no paywall, just run the handler.
         return await handler(req);
       }
 
-      if (!x402Server.hasRegisteredScheme(targetNetwork, 'exact')) {
+      // An explicit network (header or ?network=) pins the paywall to it.
+      // Otherwise every ready network is offered — DEFAULT_NETWORK first,
+      // so existing Base-only clients keep picking Base — and the payer
+      // chooses. That's what makes Arc visible to agents and indexers.
+      const requestedNet =
+        req.headers.get('x-x402-network') || new URL(req.url).searchParams.get('network');
+      const pinned = requestedNet ? NETWORK_ALIAS[requestedNet.trim().toLowerCase()] : undefined;
+      const candidates: PicoNetwork[] = pinned
+        ? [pinned]
+        : [DEFAULT_NETWORK as PicoNetwork, ...(DEFAULT_NETWORK === ARC_NETWORK ? [] : [ARC_NETWORK])];
+      const networks = candidates.filter(
+        (net) =>
+          x402Server.hasRegisteredScheme(net, 'exact') &&
+          x402Server.getSupportedKind(2, net, 'exact'),
+      );
+
+      if (networks.length === 0) {
         return NextResponse.json(
-          { error: `Network ${targetNetwork} not registered.` },
+          { error: `x402 facilitator not ready for ${candidates.join(', ')}.` },
           { status: 500 },
         );
       }
 
-      const supportedKind = x402Server.getSupportedKind(2, targetNetwork, 'exact');
-      if (!supportedKind) {
-        return NextResponse.json(
-          { error: `x402 facilitator not ready for ${targetNetwork}.` },
-          { status: 500 },
-        );
-      }
-
-      const accepts = [
-        {
-          scheme: 'exact' as const,
-          price: config.price,
-          network: targetNetwork,
-          payTo: config.payTo,
-        },
-      ];
+      const accepts = networks.map((network) => ({
+        scheme: 'exact' as const,
+        price: config.price,
+        network,
+        payTo: config.payTo,
+      }));
 
       const wrapped = withX402(
         handler,

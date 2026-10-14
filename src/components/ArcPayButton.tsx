@@ -27,9 +27,11 @@ export default function ArcPayButton({
   const [status, setStatus] = useState<'idle' | 'connecting' | 'signing'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [fundAddress, setFundAddress] = useState<string | null>(null);
 
   const pay = async () => {
     setError(null);
+    setFundAddress(null);
     const ethereum = (window as unknown as { ethereum?: EIP1193Provider }).ethereum;
     if (!ethereum) {
       setError('Paying on Arc needs a browser wallet such as Rabby or MetaMask.');
@@ -60,9 +62,8 @@ export default function ArcPayButton({
         args: [address],
       });
       if (Number(formatUnits(balance, 6)) < Number(price)) {
-        setError(
-          `This wallet has ${formatUnits(balance, 6)} USDC on Arc; you need ${price}. Bridge USDC to Arc with Circle CCTP, then try again.`,
-        );
+        setError(`This wallet has ${formatUnits(balance, 6)} USDC on Arc; you need ${price}.`);
+        setFundAddress(address);
         setStatus('idle');
         return;
       }
@@ -139,6 +140,40 @@ export default function ArcPayButton({
       {error && (
         <div style={{ fontSize: '0.75rem', color: '#f87171', marginTop: '0.5rem', textAlign: 'left' }}>
           ⚠️ {error}
+        </div>
+      )}
+      {fundAddress && (
+        <div style={{
+          marginTop: '0.5rem', padding: '0.75rem', textAlign: 'left',
+          fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5,
+          background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '10px',
+        }}>
+          <div style={{ fontWeight: 700, color: 'white', marginBottom: '0.3rem' }}>Get USDC on Arc</div>
+          Move USDC from Base, Ethereum or Arbitrum to Arc with Circle&apos;s CCTP bridge, to the same address. You only
+          need the price — Circle pays the gas for this unlock.
+          <div style={{
+            margin: '0.5rem 0', fontFamily: 'monospace', fontSize: '0.65rem', wordBreak: 'break-all',
+            background: 'rgba(255,255,255,0.03)', border: '1px solid var(--card-border)', borderRadius: '6px', padding: '0.4rem 0.6rem',
+          }}>
+            {fundAddress}
+          </div>
+          <a
+            href="https://docs.arc.io/app-kit/quickstarts/bridge-tokens-across-blockchains"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: '#3b82f6' }}
+          >
+            How to bridge USDC to Arc →
+          </a>
+          {' · '}
+          <a
+            href={`https://explorer.arc.io/address/${fundAddress}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: '#3b82f6' }}
+          >
+            Check balance on Arc →
+          </a>
         </div>
       )}
     </div>

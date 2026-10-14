@@ -368,8 +368,9 @@ export default function CreatorDashboard() {
               const when = event.createdAt ? new Date(event.createdAt) : null;
               const ago = when ? timeAgo(when) : '';
               const tx = describePaymentTx(event.txHash ?? '');
-              // Arc unlocks settle 100% to the creator — no Pico fee leg.
-              const net = (Number(event.amount) * (tx.network === 'arc' ? 1 : 0.95)).toFixed(3);
+              // x402 unlocks (Base or Arc) settle 100% to the creator; only
+              // the direct checkout carries the Pico fee leg.
+              const net = (Number(event.amount) * (tx.viaX402 ? 1 : 0.95)).toFixed(3);
               return (
                 <div key={event.id} style={{
                   padding: '0.75rem',

@@ -15,7 +15,7 @@ const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY);
 const fetchWithPayment = wrapFetchWithPayment(fetch, account);
 
 // Hit any Pico content URL — payment happens automatically on 402.
-const res = await fetchWithPayment('https://pico.link/api/content/abc-123');
+const res = await fetchWithPayment('https://picomicropay.nl/api/content/abc-123');
 const { contentUrl, title } = await res.json();`;
 
 const ARC_SNIPPET = `import { wrapFetchWithPayment, x402Client } from '@x402/fetch';
@@ -36,22 +36,21 @@ const res = await fetchWithPayment(
 );`;
 
 const CURL_PROOF = `# A bare curl shows you the 402 challenge — no signing required to peek.
-$ curl -i https://pico.link/api/content/abc-123
+$ curl -i https://picomicropay.nl/api/content/abc-123
 
 HTTP/1.1 402 Payment Required
-content-type: application/json
-www-authenticate: x402
+payment-required: <base64 JSON, decoded below>
 
 {
-  "x402Version": 1,
-  "accepts": [{
-    "scheme": "exact",
-    "network": "eip155:8453",
-    "price": "$0.20",
-    "payTo": "0x...",
-    "description": "Unlock: The full article"
-  }]
-}`;
+  "x402Version": 2,
+  "accepts": [
+    { "scheme": "exact", "network": "eip155:8453", "amount": "200000",
+      "asset": "0x8335…2913", "payTo": "0xCreator…" },
+    { "scheme": "exact", "network": "eip155:5042", "amount": "200000",
+      "asset": "0x3600…0000", "payTo": "0xCreator…" }
+  ]
+}
+# Base and Arc, same price, same creator wallet — your client picks one.`;
 
 export default function ForDevelopersPage() {
   return (
@@ -111,7 +110,7 @@ export default function ForDevelopersPage() {
       <section id="arc" style={{ marginBottom: '3rem' }}>
         <h2 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>Pay on Arc</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-          Every Pico paywall also settles on <b style={{ color: 'white' }}>Arc mainnet</b>, Circle&apos;s USDC-native chain. Add <code>?network=arc</code> (or an <code>X-X402-Network: arc</code> header) and the 402 challenge asks for Arc USDC instead of Base. Circle&apos;s x402 Facilitator settles it in under a second, directly to the creator — Pico never holds the funds.
+          Every Pico paywall offers <b style={{ color: 'white' }}>Arc mainnet</b>, Circle&apos;s USDC-native chain, alongside Base in its 402 challenge. Register only <code>eip155:5042</code> in your client (or add <code>?network=arc</code> / an <code>X-X402-Network: arc</code> header to pin it) and you pay in Arc USDC. Circle&apos;s x402 Facilitator settles it in under a second, directly to the creator — Pico never holds the funds.
         </p>
         <CodeCard label="@x402/fetch — Arc mainnet" code={ARC_SNIPPET} />
       </section>
@@ -153,7 +152,7 @@ export default function ForDevelopersPage() {
       <section className="glass" style={{ padding: '1.5rem', marginBottom: '3rem' }}>
         <h2 style={{ fontSize: '1.15rem', marginBottom: '0.5rem' }}>What does it cost your agent?</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-          The publisher sets the price. The protocol cost is the on-chain settlement on Base — currently sub-cent per call.
+          The publisher sets the price. The protocol cost is the on-chain settlement on Base or Arc — sub-cent per call, and on Arc the facilitator pays it.
         </p>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>

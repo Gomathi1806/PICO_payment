@@ -3,10 +3,7 @@ import { db } from '@/db';
 import { picoLinks, users, payments, widgetViews } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { setSettledListener, withDynamicX402 } from '@/lib/x402-config';
-import { ARC_NETWORK, encodeArcTxHash } from '@/lib/arc';
-import { PICO_TREASURY_ADDRESS } from '@/lib/constants';
-
-const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+import { encodeX402TxHash } from '@/lib/arc';
 
 /**
  * x402 paywalled content endpoint.
@@ -21,13 +18,9 @@ const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
  * gated contentUrl is only revealed once the facilitator confirms the
  * on-chain settlement.
  *
- * Fee capture: x402's exact scheme has one payTo per request. Until we
- * ship the PicoRouter splitter contract, we collect the fee off-chain
- * by routing the full payment to the Pico treasury and settling 95% to
- * the creator in a batched payout. The `payments` row records linkId +
- * gross amount so the settlement job knows who is owed what. If the
- * treasury address is unset (local dev), we fall back to direct-to-
- * creator so the flow still works end-to-end without a treasury.
+ * Every x402 unlock settles 100% to the creator's wallet, on Base or
+ * Arc — Pico never holds buyer funds. (The platform fee is taken only on
+ * the direct /p/[id] checkout, which can split atomically.)
  */
 
 // picoLinks.id is a Postgres UUID column. Passing a non-UUID string
@@ -77,18 +70,16 @@ setSettledListener(async ({ paymentPayload, requirements, result }) => {
   // link whose payee and price match what was actually settled.
   const loaded = await loadLink(linkId);
   if (!loaded) return;
-  const payTo = requirements.payTo.toLowerCase();
   const amount = (Number(result.amount ?? requirements.amount) / 1e6).toFixed(2);
-  const payeeMatches =
-    payTo === loaded.creatorWallet.toLowerCase() || payTo === PICO_TREASURY_ADDRESS.toLowerCase();
+  const payeeMatches = requirements.payTo.toLowerCase() === loaded.creatorWallet.toLowerCase();
   if (!payeeMatches || amount !== Number(loaded.link.price).toFixed(2)) {
     console.warn('[pico/x402] settled payment does not match link', linkId);
     return;
   }
 
-  // USDC is 6 decimals on every network we register (amount above).
-  const txHash =
-    result.network === ARC_NETWORK ? encodeArcTxHash(result.transaction) : result.transaction;
+  // CAIP-prefixed so the dashboard knows the network and that this was
+  // a fee-free x402 unlock (direct checkouts store the bare hash).
+  const txHash = encodeX402TxHash(result.network, result.transaction);
   try {
     await db.insert(payments).values({
       linkId,
@@ -119,7 +110,7 @@ const handler = async (req: NextRequest) => {
   });
 };
 
-export const GET = withDynamicX402(handler, async (req, network) => {
+export const GET = withDynamicX402(handler, async (req) => {
   const segments = new URL(req.url).pathname.split('/').filter(Boolean);
   const id = segments[segments.length - 1];
   const loaded = await loadLink(id);
@@ -145,22 +136,9 @@ export const GET = withDynamicX402(handler, async (req, network) => {
     }
   });
 
-  // Arc settles straight to the creator — Pico never holds the funds on
-  // this path, and there's no off-chain batch payout to reconcile.
-  const isArc = network === 'eip155:5042';
-  const treasuryConfigured =
-    !isArc && PICO_TREASURY_ADDRESS && PICO_TREASURY_ADDRESS.toLowerCase() !== ZERO_ADDR;
-  const payTo = treasuryConfigured ? PICO_TREASURY_ADDRESS : loaded.creatorWallet;
-
-  if (!treasuryConfigured && !isArc) {
-    console.warn(
-      '[pico/x402] NEXT_PUBLIC_PICO_TREASURY_ADDRESS not set — routing 100% to creator, platform fee NOT collected on this request.',
-    );
-  }
-
   return {
     price: `$${loaded.link.price}`,
-    payTo: payTo as `0x${string}`,
+    payTo: loaded.creatorWallet,
     description: `Unlock: ${loaded.link.title}`,
   };
 });
