@@ -18,6 +18,23 @@ const fetchWithPayment = wrapFetchWithPayment(fetch, account);
 const res = await fetchWithPayment('https://pico.link/api/content/abc-123');
 const { contentUrl, title } = await res.json();`;
 
+const ARC_SNIPPET = `import { wrapFetchWithPayment, x402Client } from '@x402/fetch';
+import { registerExactEvmScheme } from '@x402/evm/exact/client';
+import { privateKeyToAccount } from 'viem/accounts';
+
+// Same paywall, settled on Arc mainnet (eip155:5042) by Circle's
+// x402 Facilitator. USDC goes straight to the creator's wallet.
+const signer = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY);
+const client = registerExactEvmScheme(new x402Client(), {
+  signer,
+  networks: ['eip155:5042'],
+});
+const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+
+const res = await fetchWithPayment(
+  'https://picomicropay.nl/api/content/abc-123?network=arc',
+);`;
+
 const CURL_PROOF = `# A bare curl shows you the 402 challenge — no signing required to peek.
 $ curl -i https://pico.link/api/content/abc-123
 
@@ -88,6 +105,15 @@ export default function ForDevelopersPage() {
         <CodeCard label="@x402/fetch — Node or browser" code={QUICKSTART_FETCH} />
         <div style={{ height: '1rem' }} />
         <CodeCard label="curl — see the 402 challenge" code={CURL_PROOF} />
+      </section>
+
+      {/* Arc */}
+      <section id="arc" style={{ marginBottom: '3rem' }}>
+        <h2 style={{ fontSize: '1.3rem', marginBottom: '1rem' }}>Pay on Arc</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
+          Every Pico paywall also settles on <b style={{ color: 'white' }}>Arc mainnet</b>, Circle&apos;s USDC-native chain. Add <code>?network=arc</code> (or an <code>X-X402-Network: arc</code> header) and the 402 challenge asks for Arc USDC instead of Base. Circle&apos;s x402 Facilitator settles it in under a second, directly to the creator — Pico never holds the funds.
+        </p>
+        <CodeCard label="@x402/fetch — Arc mainnet" code={ARC_SNIPPET} />
       </section>
 
       {/* Why x402 vs everything else */}

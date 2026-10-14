@@ -2,6 +2,7 @@ import { createFacilitatorConfig } from '@coinbase/x402';
 import { HTTPFacilitatorClient, x402ResourceServer } from '@x402/core/server';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { withX402 } from '@x402/next';
+import { convertToTokenAmount, numberToDecimalString } from '@x402/core/utils';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -22,12 +23,24 @@ import { NextRequest, NextResponse } from 'next/server';
  * When Phase 2 lands, x402 will point at PicoRouter for on-chain split.
  */
 
-const NETWORK_ALIAS: Record<string, 'eip155:8453' | 'eip155:84532'> = {
+export type PicoNetwork = 'eip155:8453' | 'eip155:84532' | 'eip155:5042';
+
+const NETWORK_ALIAS: Record<string, PicoNetwork> = {
   base: 'eip155:8453',
   'eip155:8453': 'eip155:8453',
   'base-sepolia': 'eip155:84532',
   'eip155:84532': 'eip155:84532',
+  arc: 'eip155:5042',
+  'eip155:5042': 'eip155:5042',
 };
+
+// Arc mainnet USDC. Arc's native gas token is USDC (18 decimals); this
+// is its ERC-20 interface (6 decimals) and supports EIP-3009, which is
+// what the exact scheme signs. @x402/evm has no default asset for Arc,
+// so we supply it via a money parser. Values cross-checked against
+// Circle's /supported (extra.name "USDC", version "2") and on-chain.
+export const ARC_USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
+const ARC_NETWORK = 'eip155:5042';
 
 // Default to Base MAINNET. Prod, staging, and any deploy that faces real
 // users must land here. Local dev opts into testnet with X402_NETWORK=base-sepolia.
@@ -49,8 +62,15 @@ export const DEFAULT_NETWORK = (NETWORK_ALIAS[
 // "facilitator not ready". PayAI's public facilitator serves
 // v2/exact on eip155:8453 (and 84532) with no API keys, so it is the
 // mainnet workhorse. x402.org stays first purely as the Sepolia
-// preference; CDP is appended last, only when credentials exist, as a
-// fallback for anything the first two don't cover.
+// preference; CDP is appended when credentials exist, as a fallback
+// for anything the first two don't cover.
+//
+// Arc mainnet (eip155:5042) is served only by Circle's Facilitator
+// Service — CDP, PayAI and x402.org don't list it (checked 2026-10-14).
+// Circle is appended LAST so it never takes over Base from the clients
+// above. It needs CIRCLE_API_KEY: the keyless trial requires a proof
+// signed by the payTo key, and payTo is the creator's wallet, which
+// Pico doesn't (and must never) control.
 const facilitatorClients = [
   new HTTPFacilitatorClient({ url: 'https://www.x402.org/facilitator' }),
   new HTTPFacilitatorClient({ url: 'https://facilitator.payai.network' }),
@@ -63,6 +83,17 @@ if (process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET) {
         process.env.CDP_API_KEY_SECRET,
       ),
     ),
+  );
+}
+
+const circleApiKey = process.env.CIRCLE_API_KEY?.trim();
+if (circleApiKey) {
+  const auth = { Authorization: `Bearer ${circleApiKey}` };
+  facilitatorClients.push(
+    new HTTPFacilitatorClient({
+      url: 'https://api.circle.com/v1/facilitator/x402',
+      createAuthHeaders: async () => ({ verify: auth, settle: auth, supported: auth }),
+    }),
   );
 }
 
@@ -81,11 +112,28 @@ export async function ensureX402Ready() {
     process.env.CDP_API_KEY_ID = process.env.CDP_API_KEY_ID.trim();
   }
 
-  for (const net of ['eip155:8453', 'eip155:84532']) {
+  for (const net of ['eip155:8453', 'eip155:84532'] as const) {
     try {
-      x402Server.register(net as 'eip155:8453' | 'eip155:84532', new ExactEvmScheme());
+      x402Server.register(net, new ExactEvmScheme());
     } catch (error) {
       console.error(`[pico/x402] Failed to register ${net}:`, error);
+    }
+  }
+
+  if (circleApiKey) {
+    try {
+      const arcScheme = new ExactEvmScheme().registerMoneyParser(async (amount, network) =>
+        network === ARC_NETWORK
+          ? {
+              amount: convertToTokenAmount(numberToDecimalString(amount), 6),
+              asset: ARC_USDC_ADDRESS,
+              extra: { name: 'USDC', version: '2' },
+            }
+          : null,
+      );
+      x402Server.register(ARC_NETWORK, arcScheme);
+    } catch (error) {
+      console.error(`[pico/x402] Failed to register ${ARC_NETWORK}:`, error);
     }
   }
 
@@ -111,7 +159,7 @@ export async function ensureX402Ready() {
  */
 export function withDynamicX402(
   handler: (req: NextRequest) => Promise<NextResponse>,
-  resolve: (req: NextRequest) => Promise<
+  resolve: (req: NextRequest, network: PicoNetwork) => Promise<
     | { price: string; payTo: `0x${string}`; description: string }
     | null
   >,
@@ -120,18 +168,18 @@ export function withDynamicX402(
     try {
       await ensureX402Ready();
 
-      const config = await resolve(req);
+      const requestedNet =
+        req.headers.get('x-x402-network') ||
+        new URL(req.url).searchParams.get('network') ||
+        DEFAULT_NETWORK;
+      const targetNetwork = (NETWORK_ALIAS[requestedNet.trim().toLowerCase()] ??
+        DEFAULT_NETWORK) as PicoNetwork;
+
+      const config = await resolve(req, targetNetwork);
       if (!config) {
         // Free path — no paywall, just run the handler.
         return await handler(req);
       }
-
-      const requestedNet =
-        req.headers.get('x-x402-network') ||
-        req.headers.get('X-X402-Network') ||
-        DEFAULT_NETWORK;
-      const targetNetwork = (NETWORK_ALIAS[requestedNet.trim().toLowerCase()] ??
-        DEFAULT_NETWORK) as 'eip155:8453' | 'eip155:84532';
 
       if (!x402Server.hasRegisteredScheme(targetNetwork, 'exact')) {
         return NextResponse.json(

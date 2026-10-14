@@ -97,7 +97,7 @@ const handler = async (req: NextRequest) => {
   });
 };
 
-export const GET = withDynamicX402(handler, async (req) => {
+export const GET = withDynamicX402(handler, async (req, network) => {
   const segments = new URL(req.url).pathname.split('/').filter(Boolean);
   const id = segments[segments.length - 1];
   const loaded = await loadLink(id);
@@ -123,11 +123,14 @@ export const GET = withDynamicX402(handler, async (req) => {
     }
   });
 
+  // Arc settles straight to the creator — Pico never holds the funds on
+  // this path, and there's no off-chain batch payout to reconcile.
+  const isArc = network === 'eip155:5042';
   const treasuryConfigured =
-    PICO_TREASURY_ADDRESS && PICO_TREASURY_ADDRESS.toLowerCase() !== ZERO_ADDR;
+    !isArc && PICO_TREASURY_ADDRESS && PICO_TREASURY_ADDRESS.toLowerCase() !== ZERO_ADDR;
   const payTo = treasuryConfigured ? PICO_TREASURY_ADDRESS : loaded.creatorWallet;
 
-  if (!treasuryConfigured) {
+  if (!treasuryConfigured && !isArc) {
     console.warn(
       '[pico/x402] NEXT_PUBLIC_PICO_TREASURY_ADDRESS not set — routing 100% to creator, platform fee NOT collected on this request.',
     );
