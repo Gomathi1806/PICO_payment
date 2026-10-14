@@ -2,7 +2,8 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { db } from '@/db';
 import { picoLinks, users, payments, widgetViews } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { withDynamicX402 } from '@/lib/x402-config';
+import { setSettledListener, withDynamicX402 } from '@/lib/x402-config';
+import { ARC_NETWORK, encodeArcTxHash } from '@/lib/arc';
 import { PICO_TREASURY_ADDRESS } from '@/lib/constants';
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
@@ -61,6 +62,45 @@ async function loadLink(linkId: string) {
   }
 }
 
+// Record each unlock once the facilitator has actually settled it, with
+// the real tx hash and payer, so the dashboard activity feed and admin
+// view can link to the explorer.
+setSettledListener(async ({ paymentPayload, requirements, result }) => {
+  if (!result.success || !result.transaction) return;
+  const resourceUrl = paymentPayload.resource?.url;
+  if (!resourceUrl) return;
+  const segments = new URL(resourceUrl).pathname.split('/').filter(Boolean);
+  const linkId = segments[segments.length - 1];
+  if (segments[0] !== 'api' || segments[1] !== 'content' || !UUID_RE.test(linkId)) return;
+
+  // The resource URL is echoed by the buyer, so only record against a
+  // link whose payee and price match what was actually settled.
+  const loaded = await loadLink(linkId);
+  if (!loaded) return;
+  const payTo = requirements.payTo.toLowerCase();
+  const amount = (Number(result.amount ?? requirements.amount) / 1e6).toFixed(2);
+  const payeeMatches =
+    payTo === loaded.creatorWallet.toLowerCase() || payTo === PICO_TREASURY_ADDRESS.toLowerCase();
+  if (!payeeMatches || amount !== Number(loaded.link.price).toFixed(2)) {
+    console.warn('[pico/x402] settled payment does not match link', linkId);
+    return;
+  }
+
+  // USDC is 6 decimals on every network we register (amount above).
+  const txHash =
+    result.network === ARC_NETWORK ? encodeArcTxHash(result.transaction) : result.transaction;
+  try {
+    await db.insert(payments).values({
+      linkId,
+      txHash,
+      payerAddress: result.payer ?? 'x402:unknown',
+      amount,
+    });
+  } catch (e) {
+    console.warn('[pico/x402] payment record insert failed:', e);
+  }
+});
+
 const handler = async (req: NextRequest) => {
   // We don't get params directly here because withDynamicX402 wraps us.
   // Pull the id from the URL pathname.
@@ -70,24 +110,6 @@ const handler = async (req: NextRequest) => {
   const loaded = await loadLink(id);
   if (!loaded) {
     return NextResponse.json({ error: 'Link not found.' }, { status: 404 });
-  }
-
-  // Record the unlock so the dashboard activity feed picks it up.
-  // The X-Payment header is settled by the facilitator before we
-  // reach here, so it's safe to assume the tx hash and payer address
-  // can be derived from the request — but @x402/next doesn't surface
-  // those cleanly, so for now we record with placeholders and rely
-  // on the on-chain tx for ground truth. A future revision can call
-  // facilitator.settle directly to capture the txHash.
-  try {
-    await db.insert(payments).values({
-      linkId: id,
-      txHash: req.headers.get('x-payment-tx') || 'x402:pending',
-      payerAddress: req.headers.get('x-payment-from') || 'x402:unknown',
-      amount: loaded.link.price,
-    });
-  } catch (e) {
-    console.warn('[pico/x402] payment record insert failed:', e);
   }
 
   return NextResponse.json({

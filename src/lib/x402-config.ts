@@ -3,6 +3,7 @@ import { HTTPFacilitatorClient, x402ResourceServer } from '@x402/core/server';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { withX402 } from '@x402/next';
 import { convertToTokenAmount, numberToDecimalString } from '@x402/core/utils';
+import { ARC_NETWORK, ARC_USDC_ADDRESS } from '@/lib/arc';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -34,13 +35,10 @@ const NETWORK_ALIAS: Record<string, PicoNetwork> = {
   'eip155:5042': 'eip155:5042',
 };
 
-// Arc mainnet USDC. Arc's native gas token is USDC (18 decimals); this
-// is its ERC-20 interface (6 decimals) and supports EIP-3009, which is
+// Arc USDC's ERC-20 interface (6 decimals) supports EIP-3009, which is
 // what the exact scheme signs. @x402/evm has no default asset for Arc,
 // so we supply it via a money parser. Values cross-checked against
 // Circle's /supported (extra.name "USDC", version "2") and on-chain.
-export const ARC_USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
-const ARC_NETWORK = 'eip155:5042';
 
 // Default to Base MAINNET. Prod, staging, and any deploy that faces real
 // users must land here. Local dev opts into testnet with X402_NETWORK=base-sepolia.
@@ -98,6 +96,17 @@ if (circleApiKey) {
 }
 
 export const x402Server = new x402ResourceServer(facilitatorClients);
+
+// One replaceable listener rather than stacking onAfterSettle hooks, so
+// a route module re-evaluating (dev HMR) can't double-record payments.
+type SettledListener = Parameters<typeof x402Server.onAfterSettle>[0];
+let settledListener: SettledListener | null = null;
+export function setSettledListener(listener: SettledListener) {
+  settledListener = listener;
+}
+x402Server.onAfterSettle(async (ctx) => {
+  await settledListener?.(ctx);
+});
 
 let initialized = false;
 export async function ensureX402Ready() {

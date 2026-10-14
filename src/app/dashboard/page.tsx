@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { describePaymentTx } from '@/lib/arc';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useConnect, useAccount } from 'wagmi';
@@ -366,7 +367,9 @@ export default function CreatorDashboard() {
             {recentActivity.map((event) => {
               const when = event.createdAt ? new Date(event.createdAt) : null;
               const ago = when ? timeAgo(when) : '';
-              const net = (Number(event.amount) * 0.95).toFixed(3);
+              const tx = describePaymentTx(event.txHash ?? '');
+              // Arc unlocks settle 100% to the creator — no Pico fee leg.
+              const net = (Number(event.amount) * (tx.network === 'arc' ? 1 : 0.95)).toFixed(3);
               return (
                 <div key={event.id} style={{
                   padding: '0.75rem',
@@ -386,6 +389,22 @@ export default function CreatorDashboard() {
                       Net ${net} → your wallet · {ago}
                     </div>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                    <span style={{
+                      fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em',
+                      padding: '0.15rem 0.45rem', borderRadius: '100px',
+                      color: tx.network === 'arc' ? '#c4b5fd' : '#93c5fd',
+                      background: tx.network === 'arc' ? 'rgba(139,92,246,0.12)' : 'rgba(59,130,246,0.12)',
+                      border: `1px solid ${tx.network === 'arc' ? 'rgba(139,92,246,0.35)' : 'rgba(59,130,246,0.35)'}`,
+                    }}>
+                      {tx.network === 'arc' ? 'ARC' : 'BASE'}
+                    </span>
+                    {tx.explorerUrl && (
+                      <a href={tx.explorerUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.7rem', color: '#3b82f6' }}>
+                        tx ↗
+                      </a>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -397,7 +416,7 @@ export default function CreatorDashboard() {
       <section style={{ marginTop: '3rem' }}>
         <div className="glass" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            Earnings are instantly settled on Base. Cash out via Transak, Coinbase, or manual transfer.
+            Earnings are instantly settled on Base or Arc. Cash out via Transak, Coinbase, or manual transfer.
           </p>
           <button
             className="btn btn-secondary"

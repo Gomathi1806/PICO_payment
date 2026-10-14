@@ -13,6 +13,7 @@ import TransakWidget from '@/components/TransakWidget';
 import CoinbaseOnrampButton from '@/components/CoinbaseOnrampButton';
 import UnlockedContent from '@/components/UnlockedContent';
 import TrustStrip from '@/components/TrustStrip';
+import ArcPayButton from '@/components/ArcPayButton';
 
 export default function PublicLinkPage(props: { params: Promise<{ id: string }> }) {
   const params = use(props.params);
@@ -33,6 +34,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
   const [freeUnlockEligible, setFreeUnlockEligible] = useState(false);
   const [redeemingFree, setRedeemingFree] = useState(false);
   const [awaitingFunds, setAwaitingFunds] = useState(false);
+  const [arcTxHash, setArcTxHash] = useState<string | null>(null);
 
   const { address, isConnected, connector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -425,6 +427,19 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
               <h3 style={{ marginBottom: '0.5rem' }}>Payment Successful!</h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
                 You have unlocked this content.
+                {arcTxHash && (
+                  <>
+                    {' '}
+                    <a
+                      href={`https://explorer.arc.io/tx/${arcTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#3b82f6' }}
+                    >
+                      Paid on Arc — view transaction →
+                    </a>
+                  </>
+                )}
               </p>
               {unlockedUrl ? (
                 <UnlockedContent url={unlockedUrl} linkId={link.id} linkTitle={link.title} />
@@ -716,6 +731,27 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
                 </button>
               )}
 
+              {/* Alternative rail: USDC on Arc via x402, browser wallet. */}
+              {!showFundCard && (
+                <ArcPayButton
+                  linkId={link.id}
+                  price={link.price}
+                  onUnlocked={({ contentUrl, txHash }) => {
+                    setArcTxHash(txHash);
+                    setUnlockedUrl(contentUrl);
+                    setIsPaid(true);
+                    setStep('done');
+                    try {
+                      if (window.opener && !window.opener.closed) {
+                        window.opener.postMessage({ type: 'pico:unlock', linkId: link.id, txHash }, '*');
+                      }
+                    } catch {
+                      /* non-fatal */
+                    }
+                  }}
+                />
+              )}
+
               {/* Trust badges */}
               <TrustStrip variant="fan">
                 {isIAB && (
@@ -740,7 +776,7 @@ export default function PublicLinkPage(props: { params: Promise<{ id: string }> 
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
-          Secured by Base Network &amp; X402 Protocol
+          Secured by Base &amp; Arc networks · x402 Protocol
         </p>
       </div>
 

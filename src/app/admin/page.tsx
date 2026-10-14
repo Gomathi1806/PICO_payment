@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { describePaymentTx } from '@/lib/arc';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { isAdmin } from '@/lib/roles';
@@ -213,12 +214,13 @@ export default async function AdminDashboard() {
                     </td>
                     <td style={{ padding: '0.65rem 0.4rem', fontFamily: 'monospace', fontSize: '0.7rem' }}>
                       <a
-                        href={`https://basescan.org/tx/${p.txHash}`}
+                        href={describePaymentTx(p.txHash).explorerUrl ?? undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ color: 'var(--accent)', textDecoration: 'none' }}
                       >
-                        {p.txHash.slice(0, 8)}…
+                        {describePaymentTx(p.txHash).network === 'arc' ? 'arc:' : ''}
+                        {describePaymentTx(p.txHash).hash.slice(0, 8)}…
                       </a>
                     </td>
                   </tr>

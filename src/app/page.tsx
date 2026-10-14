@@ -76,6 +76,18 @@ export default function LandingPage() {
             style={{ height: '28px', verticalAlign: 'middle' }}
           />
         </a>
+        <a
+          href="/for/developers#arc"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+            marginLeft: '0.6rem', height: '28px', padding: '0 0.7rem',
+            verticalAlign: 'middle', borderRadius: '6px', textDecoration: 'none',
+            fontSize: '0.72rem', fontWeight: 700, color: '#c4b5fd',
+            background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.35)',
+          }}
+        >
+          ⚡ Settles on Arc mainnet
+        </a>
       </section>
 
       <LegalFooter />
